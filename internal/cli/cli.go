@@ -46,9 +46,10 @@ const usage = `Usage: visor [--config <path>] [--close-key <keys>]... [--version
        visor config init      write the reference to the config path, once
        visor auth jira        set up Jira: site, email and an API token,
                              which goes only to the keyring
-       visor plugin install <owner/repo[/subdir]> [--ref <ref>] [-y]
+       visor plugin install <name | owner/repo[/subdir]> [--ref <ref>] [-y]
                              fetch a Plugin from GitHub, show what it
-                             runs, ask for trust, then build it
+                             runs, ask for trust, then build it; a bare
+                             name is a folder of oronbz/visor-plugins
        visor plugin update [name...] [-y]
                              rebuild installed Plugins that have new commits
        visor plugin uninstall <name>

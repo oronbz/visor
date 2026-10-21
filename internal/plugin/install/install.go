@@ -41,14 +41,23 @@ type Source struct {
 	Subdir string
 }
 
+// official is the repository a bare Plugin name installs from, one Plugin per folder.
+var official = Source{Owner: "oronbz", Repo: "visor-plugins"}
+
+// ParseSource reads owner/repo, owner/repo/subdir, or a bare Plugin name in official.
 func ParseSource(s string) (Source, error) {
-	parts := strings.Split(strings.Trim(s, "/"), "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		return Source{}, fmt.Errorf("%q isn't owner/repo or owner/repo/subdir", s)
+	invalid := fmt.Errorf("%q isn't a Plugin name, owner/repo or owner/repo/subdir", s)
+	trimmed := strings.Trim(s, "/")
+	if !strings.Contains(trimmed, "/") {
+		if !validName.MatchString(trimmed) {
+			return Source{}, invalid
+		}
+		return Source{Owner: official.Owner, Repo: official.Repo, Subdir: trimmed}, nil
 	}
+	parts := strings.Split(trimmed, "/")
 	for _, p := range parts {
 		if p == "" || p == "." || p == ".." {
-			return Source{}, fmt.Errorf("%q isn't owner/repo or owner/repo/subdir", s)
+			return Source{}, invalid
 		}
 	}
 	return Source{Owner: parts[0], Repo: parts[1], Subdir: strings.Join(parts[2:], "/")}, nil

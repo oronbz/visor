@@ -111,7 +111,7 @@ func (c *pluginCLI) install(args []string) int {
 	ref := fs.String("ref", "", "the branch, tag or commit to install")
 	rest, ok := c.parse(fs, args)
 	if !ok || len(rest) != 1 {
-		fmt.Fprintln(c.s.Stderr, "Usage: visor plugin install <owner/repo[/subdir]> [--ref <ref>] [-y]")
+		fmt.Fprintln(c.s.Stderr, "Usage: visor plugin install <name | owner/repo[/subdir]> [--ref <ref>] [-y]")
 		return 2
 	}
 	src, err := install.ParseSource(rest[0])

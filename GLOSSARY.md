@@ -2,6 +2,8 @@
 
 **Plugin**: An installable package that provides one or more Widget types.
 
+**Official Plugin**: A Plugin in a folder of `oronbz/visor-plugins`. It installs by its bare name, so `visor plugin install bitrise` installs `oronbz/visor-plugins/bitrise`.
+
 **Widget type**: A kind of tile a Plugin provides, such as Weather or Review requests. It becomes visible only when placed as a Widget.
 
 **Widget**: One placed, configured tile on the dashboard, an instance of a Widget type. The same Widget type can be placed more than once with different settings (weather for two cities, two Jira queries). Some Widgets list Items (pull requests, reminders); others are live views with no Items (clock, CPU gauge, weather).

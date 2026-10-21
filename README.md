@@ -216,6 +216,7 @@ A Plugin is a program that adds one or more Widget types. visor starts it and ta
 ### Installing Plugins
 
 ```sh
+visor plugin install bitrise               # an official Plugin, by name
 visor plugin install owner/repo            # or owner/repo/subdir, with --ref <tag or branch>
 visor plugin list
 visor plugin update [name...]
@@ -224,7 +225,7 @@ visor plugin uninstall <name>
 
 Before it builds anything, `install` shows the Plugin's Widget types and every build command it will run, and asks you to trust it (`-y` skips the question). Installing a Plugin means trusting its code, the same as `herdr plugin install`. Plugins go to `~/.local/share/visor/plugins/<name>/`, and running instances pick up an install, update or uninstall without a restart.
 
-To find Plugins, look for the [`visor-plugin` topic](https://github.com/topics/visor-plugin) on GitHub.
+A bare name installs that folder of the official repo, [oronbz/visor-plugins](https://github.com/oronbz/visor-plugins), so `visor plugin install bitrise` is `visor plugin install oronbz/visor-plugins/bitrise`. To find more Plugins, look for the [`visor-plugin` topic](https://github.com/topics/visor-plugin) on GitHub.
 
 ### Writing a Plugin
 
@@ -264,7 +265,7 @@ The quickest way is to ask your agent to use the `visor-make-plugin` skill. By h
    path = "~/code/hello"
    ```
 
-5. To publish, push it to GitHub and add the `visor-plugin` topic to the repo. People install it with `visor plugin install you/hello`.
+5. To publish, push it to GitHub and add the `visor-plugin` topic to the repo. People install it with `visor plugin install you/hello`. To make it an official Plugin that installs by name, open a pull request adding its folder to [oronbz/visor-plugins](https://github.com/oronbz/visor-plugins).
 
 Plugins draw only with visor's 13 colour tokens, never raw colours, so they follow the user's theme.
 
