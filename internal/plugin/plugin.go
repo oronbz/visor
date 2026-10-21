@@ -575,15 +575,9 @@ func (w *pluginWidget) Refresh(ctx context.Context, _ time.Time) (widget.Payload
 	return *p, nil
 }
 
-// read is u as w shows it, with the host's own Action for each of w's
-// secret settings added to its payload.
 func (w *pluginWidget) read(u update) (*widget.Payload, error) {
 	p, err := u.read(w.p.m.Dir, w.typ, w.schema)
-	if err != nil {
-		return nil, w.p.withName(err)
-	}
-	w.offerSecrets(p)
-	return p, nil
+	return p, w.p.withName(err)
 }
 
 // repush refreshes w unasked and pushes what it gets.
@@ -610,18 +604,6 @@ func (w *pluginWidget) missingSecret() error {
 		}
 	}
 	return nil
-}
-
-// offerSecrets adds the host's own Action for each of w's secret settings.
-func (w *pluginWidget) offerSecrets(p *widget.Payload) {
-	if p == nil {
-		return
-	}
-	for _, s := range w.schema {
-		if s.Kind == widget.Secret {
-			p.Actions = append(p.Actions, s.SetAction())
-		}
-	}
 }
 
 // setSecret keeps value as secret setting name, which never reaches the

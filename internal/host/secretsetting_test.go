@@ -285,3 +285,22 @@ func TestASecretStoredBeforeThePluginStartsIsMaskedInAllItSendsBack(t *testing.T
 	shows(t, status, "upstream refused ••••")
 	noSecret(t, status, "in a Status message")
 }
+
+func TestSetSecretIsOfferedWhateverStateTheWidgetIsIn(t *testing.T) {
+	for _, tc := range []struct{ mode, shown string }{
+		{"setup", "Sign in to Fixture"},
+		{"error", "upstream is down"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			h, log := installed(t, "octo/fixture", &hosttest.Keyring{}, fixtureWidget+"mode = \""+tc.mode+"\"\n")
+			h.Resize(140, 12)
+			shows(t, h, tc.shown)
+
+			setToken(h, secret)
+			h.ReceiveUntil(func() bool { return strings.Contains(h.Screen(), "Saved the token to the keyring") })
+			if got := log.opened(t)["fixture"]["token"]; got != secret {
+				t.Errorf("the Widget last opened with token %v, want the secret", got)
+			}
+		})
+	}
+}

@@ -166,7 +166,8 @@ const (
 )
 
 // actions are Widget id's Actions as they apply now: the selected Item's,
-// then the Widget's, then the host-provided ones.
+// then the Widget's, then the host-provided ones, which always include
+// setting each of its secrets.
 func (m Model) actions(id string) []bound {
 	r, ok := m.rects()[id]
 	if !ok {
@@ -181,24 +182,30 @@ func (m Model) actions(id string) []bound {
 	if m.widgets[id].setup != "" {
 		return host[1:]
 	}
-	if s := m.sched[id].setup; s != nil {
-		if s.Action == nil {
-			return host
-		}
-		a := *s.Action
-		a.Primary = true
-		return append([]bound{{Action: a}}, host...)
-	}
-	p := m.payloadIn(id, r)
 	var out []bound
-	if st := m.lists[id]; st.idx < len(p.Items) {
-		it := p.Items[st.idx]
-		for _, a := range it.Actions {
-			out = append(out, bound{Action: a, item: it.ID, subject: subject(p, it)})
+	if s := m.sched[id].setup; s != nil {
+		if s.Action != nil {
+			a := *s.Action
+			a.Primary = true
+			out = append(out, bound{Action: a})
+		}
+	} else {
+		p := m.payloadIn(id, r)
+		if st := m.lists[id]; st.idx < len(p.Items) {
+			it := p.Items[st.idx]
+			for _, a := range it.Actions {
+				out = append(out, bound{Action: a, item: it.ID, subject: subject(p, it)})
+			}
+		}
+		for _, a := range p.Actions {
+			out = append(out, bound{Action: a})
 		}
 	}
-	for _, a := range p.Actions {
-		out = append(out, bound{Action: a})
+	for _, s := range m.widgets[id].typ.Settings {
+		set := s.SetAction()
+		if s.Kind == widget.Secret && !slices.ContainsFunc(out, func(b bound) bool { return b.ID == set.ID }) {
+			out = append(out, bound{Action: set})
+		}
 	}
 	return append(out, host...)
 }

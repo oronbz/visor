@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -325,6 +326,22 @@ func TestPluginUninstallDeletesItsSecretsFromTheKeyring(t *testing.T) {
 	}
 	if got, ok := stored.Get("token"); ok {
 		t.Errorf("the keyring still holds %q", got)
+	}
+}
+
+func TestPluginUninstallWorksWithNoKeyring(t *testing.T) {
+	in := newInstalls(t)
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+	in.visor("", "plugin", "install", "-y", "octo/greet")
+	in.keyring.Err = errors.New("The name org.freedesktop.secrets was not provided by any .service files")
+
+	code, stdout, stderr := in.visor("", "plugin", "uninstall", "greet")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	contains(t, "stdout", stdout, "Uninstalled greet")
+	if got := in.installed(); strings.Join(got, " ") != ".staging .uninstalled" {
+		t.Errorf("plugins directory holds %v after uninstall", got)
 	}
 }
 

@@ -163,7 +163,8 @@ func (i Installer) Update(ctx context.Context, name string, trust func(Plan) boo
 	return was, plan.Record, nil
 }
 
-// Uninstall keeps a Tombstone of the Plugin it deletes.
+// Uninstall keeps a Tombstone of the Plugin it deletes. Its secrets go
+// first, so one the keyring won't let go of leaves the Plugin installed.
 func (i Installer) Uninstall(name string) (plugin.Record, error) {
 	dir, err := i.dir(name)
 	if err != nil {
@@ -171,10 +172,10 @@ func (i Installer) Uninstall(name string) (plugin.Record, error) {
 	}
 	rec, _ := plugin.ReadRecord(dir)
 	if m, err := plugin.ReadManifest(dir); err == nil {
-		if err := plugin.Bury(i.Dir, m, rec); err != nil {
+		if err := (plugin.Secrets{Keyring: i.Keyring, Identity: plugin.Identity(dir, rec)}).Forget(m); err != nil {
 			return rec, err
 		}
-		if err := (plugin.Secrets{Keyring: i.Keyring, Identity: plugin.Identity(dir, rec)}).Forget(m); err != nil {
+		if err := plugin.Bury(i.Dir, m, rec); err != nil {
 			return rec, err
 		}
 	}
