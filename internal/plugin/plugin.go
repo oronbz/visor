@@ -413,9 +413,8 @@ func (p *Plugin) notified(method string, params json.RawMessage) {
 	if w == nil {
 		return
 	}
-	payload, err := u.read(p.m.Dir)
-	w.offerSecrets(payload)
-	w.deliver(widget.Push{Payload: payload, Err: p.withName(err)})
+	payload, err := w.read(u)
+	w.deliver(widget.Push{Payload: payload, Err: err})
 }
 
 func (p *Plugin) secrets() Secrets {
@@ -551,6 +550,9 @@ type pluginWidget struct {
 }
 
 func (w *pluginWidget) Refresh(ctx context.Context, _ time.Time) (widget.Payload, error) {
+	if err := w.missingSecret(); err != nil {
+		return widget.Payload{}, err
+	}
 	proc, err := w.p.connect(ctx, w)
 	if err != nil {
 		return widget.Payload{}, err
@@ -559,15 +561,25 @@ func (w *pluginWidget) Refresh(ctx context.Context, _ time.Time) (widget.Payload
 	if err := proc.conn.Call(ctx, "widget/refresh", widgetParams{Widget: w.id}, &u); err != nil {
 		return widget.Payload{}, w.p.callErr(err)
 	}
-	p, err := u.read(w.p.m.Dir)
+	p, err := w.read(u)
 	switch {
 	case err != nil:
-		return widget.Payload{}, w.p.withName(err)
+		return widget.Payload{}, err
 	case p == nil:
 		return widget.Payload{}, w.p.withName(errors.New("answered widget/refresh with no payload"))
 	}
-	w.offerSecrets(p)
 	return *p, nil
+}
+
+// read is u as w shows it, with the host's own Action for each of w's
+// secret settings added to its payload.
+func (w *pluginWidget) read(u update) (*widget.Payload, error) {
+	p, err := u.read(w.p.m.Dir, w.typ, w.schema)
+	if err != nil {
+		return nil, w.p.withName(err)
+	}
+	w.offerSecrets(p)
+	return p, nil
 }
 
 // repush refreshes w unasked and pushes what it gets.
@@ -578,6 +590,22 @@ func (w *pluginWidget) repush() {
 		return
 	}
 	w.deliver(widget.Push{Payload: &p})
+}
+
+// missingSecret is the setup a required secret setting with no stored
+// value puts w in, which the Plugin is never refreshed through.
+func (w *pluginWidget) missingSecret() error {
+	secrets := w.p.secrets()
+	for _, s := range w.schema {
+		if s.Kind != widget.Secret || !s.Required {
+			continue
+		}
+		if _, ok := secrets.Get(s.Name); !ok {
+			fix := s.SetAction()
+			return &widget.SetupError{Hint: "No " + s.Label() + " set", Action: &fix}
+		}
+	}
+	return nil
 }
 
 // offerSecrets adds the host's own Action for each of w's secret settings.
@@ -623,6 +651,11 @@ func (w *pluginWidget) Invoke(ctx context.Context, inv widget.Invocation) (widge
 	err = proc.conn.Call(ctx, "action/invoke", invokeParams{Widget: w.id, Action: inv.Action, Item: inv.Item, Text: inv.Text, Choice: inv.Choice, Base: inv.Base}, &res)
 	if err != nil {
 		return widget.Result{}, w.p.callErr(err)
+	}
+	if res.Then != nil {
+		if err := ownsNoSecret(*res.Then); err != nil {
+			return widget.Result{}, w.p.withName(err)
+		}
 	}
 	settings, err := res.settings(w.schema)
 	if err != nil {

@@ -52,6 +52,26 @@ func (s Secrets) Set(name, value string) error {
 	return s.Keyring.Set(keyringService, s.account(name), value)
 }
 
+// Forget deletes the stored value of every secret setting m declares; one
+// never stored is already gone.
+func (s Secrets) Forget(m Manifest) error {
+	if s.Keyring == nil {
+		return nil
+	}
+	var errs []error
+	for _, wt := range m.Widgets {
+		for _, st := range wt.Settings {
+			if kinds[st.Kind] != widget.Secret {
+				continue
+			}
+			if err := s.Keyring.Delete(keyringService, s.account(st.Name)); err != nil && !errors.Is(err, ports.ErrSecretNotFound) {
+				errs = append(errs, fmt.Errorf("couldn't delete its %s from the keyring: %w", st.Name, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // withSecrets is settings plus the stored value of each secret in schema.
 func (s Secrets) withSecrets(settings map[string]any, schema []widget.Setting) map[string]any {
 	out := make(map[string]any, len(settings))

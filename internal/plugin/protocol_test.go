@@ -40,6 +40,15 @@ func TestActionsRoundTripWithTheirInput(t *testing.T) {
 	}
 }
 
+func TestAnActionLeadingIntoAnActionOfVisorsOwnIsRejected(t *testing.T) {
+	_, typ := fixture(t, plugintest.Options{})
+	w := open(t, typ, "fx", &clock{now: t0}, nil)
+	_, err := invoke(t, w, widget.Invocation{Action: "chain-secret"})
+	if err == nil || err.Error() != "Plugin `fixture` sent Action `secret:token`, but ids starting `secret:` are visor's own" {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestChoicesAreFetchedWhenAsked(t *testing.T) {
 	_, typ := fixture(t, plugintest.Options{})
 	w := open(t, typ, "fx", &clock{now: t0}, nil)

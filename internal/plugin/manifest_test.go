@@ -112,6 +112,7 @@ func TestTheProtocolSchemaDescribesARealSession(t *testing.T) {
 	lines := open(t, typ, "lines", c, widget.Settings{"mode": "lines"})
 	refresh(t, lines)
 	refresh(t, open(t, typ, "setup", c, widget.Settings{"mode": "setup"}))
+	refresh(t, open(t, typ, "rejected", c, widget.Settings{"mode": "rejected"}))
 	refresh(t, open(t, typ, "error", c, widget.Settings{"mode": "error"}))
 	lines.(widget.Closer).Close()
 	var b []byte
@@ -161,6 +162,7 @@ func TestTheHostAndTheSchemaRejectTheSameRefreshes(t *testing.T) {
 	for mode, rejected := range map[string]bool{
 		"items": false, "lines": false, "setup": false, "error": false,
 		"image-file": false, "raw-colour": true, "malformed": true, "unknown-field": true, "two-images": true, "bad-side": true,
+		"rejected": false, "unknown-secret": true, "own-secret": true,
 	} {
 		t.Run(mode, func(t *testing.T) {
 			o := plugintest.Options{Mode: mode}

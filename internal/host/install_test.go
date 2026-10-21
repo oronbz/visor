@@ -3,10 +3,12 @@ package host_test
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/oronbz/visor/internal/hosttest"
 	"github.com/oronbz/visor/internal/paths"
+	"github.com/oronbz/visor/internal/plugin"
 	"github.com/oronbz/visor/internal/plugin/install"
 	"github.com/oronbz/visor/internal/plugin/plugintest"
 	"github.com/oronbz/visor/internal/widget"
@@ -26,10 +28,12 @@ func newInstalls(t *testing.T) *installs {
 	root := t.TempDir()
 	gh := plugintest.NewGitHub(t)
 	gh.Push("octo/greet", "main", greetRepo(t, "1"))
+	h := hosttest.New(t, hosttest.Options{Root: root, Width: 100, Height: 12, Types: []widget.Type{}, Config: "[[widget]]\ntype = \"greet\"\n"})
 	return &installs{t: t, gh: gh, ins: install.Installer{
 		Dir:     filepath.Join(paths.Under(root).Data, "plugins"),
 		Fetcher: install.GitHub{API: gh.URL},
-	}, h: hosttest.New(t, hosttest.Options{Root: root, Width: 100, Height: 12, Types: []widget.Type{}, Config: "[[widget]]\ntype = \"greet\"\n"})}
+		Keyring: h.Keyring,
+	}, h: h}
 }
 
 func greetRepo(t *testing.T, version string) map[string]string {
@@ -71,6 +75,25 @@ func TestUninstallingPutsTheWidgetsInNeedsSetupNamingTheInstallCommand(t *testin
 	in.changed()
 	shows(t, in.h, "needs setup", "Plugin `greet` isn't installed", "visor plugin install octo/greet")
 	hides(t, in.h, "hello alpha", "unknown Widget type")
+}
+
+func TestUninstallingDeletesThePluginsSecrets(t *testing.T) {
+	in := newInstalls(t)
+	in.install()
+	setToken(in.h, secret)
+	in.h.ReceiveUntil(func() bool { return strings.Contains(in.h.Screen(), "hello alpha (signed in)") })
+
+	stored := plugin.Secrets{Keyring: in.h.Keyring, Identity: "octo/greet"}
+	if got, _ := stored.Get("token"); got != secret {
+		t.Fatalf("the keyring holds %q before the uninstall, want the secret", got)
+	}
+
+	if _, err := in.ins.Uninstall("greet"); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := stored.Get("token"); ok {
+		t.Errorf("the keyring still holds %q after the uninstall", got)
+	}
 }
 
 func TestAnInstanceStartedAfterAnUninstallStillNamesTheInstallCommand(t *testing.T) {

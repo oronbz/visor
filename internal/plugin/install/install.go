@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/oronbz/visor/internal/plugin"
+	"github.com/oronbz/visor/internal/ports"
 )
 
 type Fetcher interface {
@@ -77,6 +78,8 @@ type Installed struct {
 }
 
 type Installer struct {
+	// Keyring holds the secrets Uninstall deletes; nil leaves them.
+	Keyring ports.Keyring
 	// Dir is the plugins directory.
 	Dir     string
 	Fetcher Fetcher
@@ -160,6 +163,9 @@ func (i Installer) Uninstall(name string) (plugin.Record, error) {
 	rec, _ := plugin.ReadRecord(dir)
 	if m, err := plugin.ReadManifest(dir); err == nil {
 		if err := plugin.Bury(i.Dir, m, rec); err != nil {
+			return rec, err
+		}
+		if err := (plugin.Secrets{Keyring: i.Keyring, Identity: plugin.Identity(dir, rec)}).Forget(m); err != nil {
 			return rec, err
 		}
 	}

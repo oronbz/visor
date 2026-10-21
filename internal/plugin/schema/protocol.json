@@ -78,7 +78,7 @@
       }
     },
     "openParams": {
-      "description": "host → Plugin, notification: a Widget of one of the Plugin's types was placed, with its settings (defaults filled in, durations as strings such as \"5m\") and how it's shown. A secret setting is in settings only once the user has set it. Sent again, after a new initialize, when the process restarts, and for every Widget of the Plugin, with no widget/close first, when the user sets a secret.",
+      "description": "host → Plugin, notification: a Widget of one of the Plugin's types was placed, with its settings (defaults filled in, durations as strings such as \"5m\") and how it's shown. A secret setting is in settings only once the user has set it; while a required one isn't set, the host shows the Widget in needs setup with its \"Set <name>\" Action and sends it no widget/refresh. Sent again, after a new initialize, when the process restarts, and for every Widget of the Plugin, with no widget/close first, when the user sets a secret.",
       "allOf": [{ "$ref": "#/$defs/frameParams" }],
       "required": ["type", "settings"],
       "properties": {
@@ -122,7 +122,13 @@
         "message": { "type": "string" },
         "reason": { "type": "string" },
         "hint": { "type": "string" },
-        "action": { "$ref": "#/$defs/action" },
+        "action": {
+          "description": "setup's fix: an Action of the Plugin's, or the id of one of the host's own, such as \"secret:token\" for the \"Set token\" Action of the Widget type's secret setting `token` (to send the user back to the prompt when the stored value is rejected). Naming a secret setting the Widget type doesn't declare is an error.",
+          "oneOf": [
+            { "$ref": "#/$defs/action" },
+            { "$ref": "#/$defs/hostActionId" }
+          ]
+        },
         "until": { "description": "RFC 3339 time a rate limit lifts.", "type": "string" }
       }
     },
@@ -234,12 +240,17 @@
         "token": { "$ref": "#/$defs/token" }
       }
     },
+    "hostActionId": {
+      "description": "The id of an Action the host owns and runs itself, never sending it to the Plugin as action/invoke. `secret:<name>` is the \"Set <name>\" Action the host adds to the Widget Actions of a Widget type with secret setting <name>: a masked prompt whose value it keeps in the OS keyring and sends in widget/open's settings, reopening every Widget of the Plugin.",
+      "type": "string",
+      "pattern": "^secret:[a-z][a-z0-9_]*$"
+    },
     "action": {
       "type": "object",
       "required": ["id", "label"],
       "additionalProperties": false,
       "properties": {
-        "id": { "description": "Free-form; comes back in action/invoke.", "type": "string" },
+        "id": { "description": "Free-form; comes back in action/invoke. Ids starting `secret:` are the host's own (see hostActionId) and rejected on a Plugin's Action.", "type": "string", "not": { "pattern": "^secret:" } },
         "key": { "description": "The key that runs it while the Widget is focused, as Bubble Tea prints keys: \"a\", \"enter\", \"space\", \"ctrl+e\". Host keys win; the Action stays in the ^K palette.", "type": "string" },
         "label": { "type": "string" },
         "primary": { "description": "Runs on enter.", "type": "boolean" },

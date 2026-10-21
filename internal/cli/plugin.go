@@ -29,6 +29,7 @@ func pluginManage(s System, pp ports.Ports, p paths.Paths, configFile string, lo
 	c := pluginCLI{s: s, in: bufio.NewReader(s.Stdin), installer: install.Installer{
 		Dir:     filepath.Join(p.Data, "plugins"),
 		Fetcher: githubFetcher(s.Getenv, pp),
+		Keyring: pp.Keyring,
 		Log:     s.Stderr,
 	}}
 	if args[0] != "list" {

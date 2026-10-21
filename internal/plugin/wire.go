@@ -6,6 +6,7 @@ import (
 	"math"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/oronbz/visor/internal/widget"
@@ -109,24 +110,77 @@ type update struct {
 }
 
 type status struct {
-	State   string         `json:"state"`
-	Message string         `json:"message,omitempty"`
-	Reason  string         `json:"reason,omitempty"`
-	Hint    string         `json:"hint,omitempty"`
-	Action  *widget.Action `json:"action,omitempty"`
-	Until   time.Time      `json:"until,omitzero"`
+	State   string        `json:"state"`
+	Message string        `json:"message,omitempty"`
+	Reason  string        `json:"reason,omitempty"`
+	Hint    string        `json:"hint,omitempty"`
+	Action  *statusAction `json:"action,omitempty"`
+	Until   time.Time     `json:"until,omitzero"`
+}
+
+// statusAction is a setup Status's fix: an Action of the Plugin's own, or
+// the id of one of visor's, such as "secret:token".
+type statusAction struct {
+	own *widget.Action
+	id  string
+}
+
+func (a *statusAction) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '"' {
+		return json.Unmarshal(b, &a.id)
+	}
+	a.own = new(widget.Action)
+	return json.Unmarshal(b, a.own)
+}
+
+// fix is the Action a setup Status offers: the Plugin's own, or the
+// SetAction of the secret setting in schema that its id names.
+func (a *statusAction) fix(typ string, schema []widget.Setting) (*widget.Action, error) {
+	switch {
+	case a == nil:
+		return nil, nil
+	case a.own != nil:
+		return a.own, ownsNoSecret(*a.own)
+	}
+	name, ok := strings.CutPrefix(a.id, widget.SecretPrefix)
+	if !ok {
+		return nil, fmt.Errorf("sent setup naming Action `%s`, but only ids starting `%s` name visor's own", a.id, widget.SecretPrefix)
+	}
+	i := slices.IndexFunc(schema, func(s widget.Setting) bool { return s.Kind == widget.Secret && s.Name == name })
+	if i < 0 {
+		return nil, fmt.Errorf("sent setup naming Action `%s`, but Widget type `%s` has no secret setting `%s`", a.id, typ, name)
+	}
+	set := schema[i].SetAction()
+	return &set, nil
+}
+
+// ownsNoSecret rejects a Plugin's Action whose id is one of visor's own.
+func ownsNoSecret(as ...widget.Action) error {
+	for _, a := range as {
+		if strings.HasPrefix(a.ID, widget.SecretPrefix) {
+			return fmt.Errorf("sent Action `%s`, but ids starting `%s` are visor's own", a.ID, widget.SecretPrefix)
+		}
+	}
+	return nil
 }
 
 // read is an update in Widget-contract terms: its payload, if any, and its
-// Status as Refresh would return it. A payload the schema rejects, such as
-// one with a raw colour, is an error naming why. An image path is relative
-// to dir, where the Plugin runs.
-func (u update) read(dir string) (*widget.Payload, error) {
+// Status as Refresh would return it, for a Widget of type typ with schema.
+// A payload the schema rejects, such as one with a raw colour, is an error
+// naming why. An image path is relative to dir, where the Plugin runs.
+func (u update) read(dir, typ string, schema []widget.Setting) (*widget.Payload, error) {
 	var p *widget.Payload
 	if len(u.Payload) > 0 && string(u.Payload) != "null" {
 		p = new(widget.Payload)
 		err := json.Unmarshal(u.Payload, p)
 		if err == nil {
+			actions := slices.Clone(p.Actions)
+			for _, it := range p.Items {
+				actions = append(actions, it.Actions...)
+			}
+			if err := ownsNoSecret(actions...); err != nil {
+				return nil, err
+			}
 			err = validateJSON("protocol.json#/$defs/payload", u.Payload)
 		}
 		if err != nil {
@@ -143,7 +197,11 @@ func (u update) read(dir string) (*widget.Payload, error) {
 	case "", "ok":
 		return p, nil
 	case "setup":
-		return nil, &widget.SetupError{Hint: st.Message, Action: st.Action}
+		fix, err := st.Action.fix(typ, schema)
+		if err != nil {
+			return nil, err
+		}
+		return nil, &widget.SetupError{Hint: st.Message, Action: fix}
 	case "rate_limited":
 		return nil, &widget.RateLimitError{Until: st.Until, Err: failure{msg: st.Message, reason: st.Reason, hint: st.Hint}}
 	case "error":

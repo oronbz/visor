@@ -253,6 +253,8 @@ The quickest way is to ask your agent to use the `visor-make-plugin` skill. By h
 
    If it needs building, add `[[build]]` steps such as `run = ["go", "build", "-o", "hello"]`. `visor plugin install` runs them in the Plugin's directory, with no shell.
 
+   If it needs a credential, declare it as a setting with `kind = "secret"` instead of storing it yourself. visor asks for it with a "Set <name>" Action, keeps it in your system keyring, and hands it to the Plugin with the Widget's other settings.
+
 2. `visor plugin schema` prints the JSON Schema of the manifest and the protocol for your visor version. Your program answers `initialize`, then `widget/refresh` with a payload, and can push updates on its own.
 3. `visor plugin check <dir>` starts it and runs the whole protocol against it (handshake, a Widget's lifecycle, a refresh and an Action), and tells you what's wrong.
 4. Load it while you work on it by adding its path to your config:

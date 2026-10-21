@@ -6,6 +6,8 @@
 
 **Widget**: One placed, configured tile on the dashboard, an instance of a Widget type. The same Widget type can be placed more than once with different settings (weather for two cities, two Jira queries). Some Widgets list Items (pull requests, reminders); others are live views with no Items (clock, CPU gauge, weather).
 
+**Secret setting**: A Widget type's setting that holds a credential, such as an API token. visor asks for it in a masked prompt through the Widget's "Set <name>" Action and keeps it in the OS keyring, never in config.toml. It belongs to the Plugin, not to one Widget, so every Widget of the Plugin shares it, and uninstalling the Plugin deletes it. A Plugin never stores a credential itself.
+
 **Item**: A single row in a list Widget, such as a pull request, a ticket, a reminder or a meeting.
 
 **Summary**: Lines a list Widget pins above its Items, such as headline numbers, a chart or a bar, so one Widget can show both. They stay put while the Items scroll. It isn't called a header because Group headers already exist.

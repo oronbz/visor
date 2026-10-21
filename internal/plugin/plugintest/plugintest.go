@@ -71,6 +71,8 @@ type Options struct {
 	// Command replaces the built fixture (and Args) as the command.
 	Command []string
 	Build   [][]string
+	// TokenRequired makes the `token` secret setting required.
+	TokenRequired bool
 }
 
 // Write lays out a fixture Plugin in dir: its visor-plugin.toml, whose
@@ -131,14 +133,15 @@ name = "mode"
 kind = "string"
 default = %q
 description = "What refreshes return"
-choices = ["items", "lines", "raw-colour", "malformed", "unknown-field", "setup", "error", "two-images", "bad-side", "image-file"]
+choices = ["items", "lines", "raw-colour", "malformed", "unknown-field", "setup", "error", "two-images", "bad-side", "image-file", "rejected", "unknown-secret", "own-secret"]
 
 [[widget.setting]]
 name = "token"
 kind = "secret"
 description = "Your Fixture token"
 target = "https://example.com/tokens/new"
-%s`, o.Name, o.Protocol, quoted(o.Command), o.Name, o.Refresh, o.Default, o.Mode, build.String())
+required = %t
+%s`, o.Name, o.Protocol, quoted(o.Command), o.Name, o.Refresh, o.Default, o.Mode, o.TokenRequired, build.String())
 }
 
 func quoted(args []string) string {

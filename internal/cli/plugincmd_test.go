@@ -87,6 +87,31 @@ func TestPluginCheckPassesAConformingPlugin(t *testing.T) {
 	}
 }
 
+func TestPluginCheckRunsEveryWidgetWithNoSecretsSet(t *testing.T) {
+	for name, c := range map[string]struct {
+		o    plugintest.Options
+		want []string
+	}{
+		"required":       {plugintest.Options{TokenRequired: true}, []string{"`fixture`, Widget types: fixture; secret settings: token (required)", "refresh fixture  needs setup: No token set (⏎ Set token)"}},
+		"plugin's setup": {plugintest.Options{Mode: "rejected"}, []string{"`fixture`, Widget types: fixture; secret settings: token\n", "refresh fixture  needs setup: Fixture rejected the token (⏎ Set token)"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, home, stdout, stderr := sandbox(t, nil, "")
+			dir := plugintest.Write(t, filepath.Join(home, "fixture"), c.o)
+			s.Args = []string{"plugin", "check", dir}
+
+			if code := cli.Run(s); code != 0 {
+				t.Fatalf("exit %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+			}
+			for _, want := range c.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Errorf("no %q:\n%s", want, stdout)
+				}
+			}
+		})
+	}
+}
+
 func TestPluginCheckFailsTheStepThatBreaksTheProtocol(t *testing.T) {
 	for name, c := range map[string]struct {
 		o        plugintest.Options
@@ -97,12 +122,15 @@ func TestPluginCheckFailsTheStepThatBreaksTheProtocol(t *testing.T) {
 		// answers needs it short, so a slow machine can't fail earlier steps.
 		timeout string
 	}{
-		"invalid manifest": {manifest: "name = \"broken\"\nprotocol = 1\n", step: "manifest", want: []string{"visor-plugin.toml: missing properties 'command', 'widget'"}},
-		"newer protocol":   {o: plugintest.Options{Protocol: 2}, step: "manifest", want: []string{"declares protocol 2, but this visor speaks 1"}},
-		"no handshake":     {o: plugintest.Options{Args: []string{"-handshake", "silent"}}, step: "handshake", want: []string{"failed its handshake: didn't answer initialize"}, timeout: "300ms"},
-		"empty handshake":  {o: plugintest.Options{Args: []string{"-handshake", "empty"}}, step: "handshake", want: []string{"speaks protocol 0", "answer to initialize breaks the schema: result: missing property 'protocol'"}},
-		"malformed":        {o: plugintest.Options{Mode: "malformed"}, step: "refresh fixture", want: []string{"sent a malformed message"}},
-		"raw colours":      {o: plugintest.Options{Mode: "raw-colour"}, step: "refresh fixture", want: []string{`"#ff0000" is not a theme token`, "answer to widget/refresh breaks the schema: result: payload.lines.0.spans.0.token"}},
+		"invalid manifest":      {manifest: "name = \"broken\"\nprotocol = 1\n", step: "manifest", want: []string{"visor-plugin.toml: missing properties 'command', 'widget'"}},
+		"newer protocol":        {o: plugintest.Options{Protocol: 2}, step: "manifest", want: []string{"declares protocol 2, but this visor speaks 1"}},
+		"no handshake":          {o: plugintest.Options{Args: []string{"-handshake", "silent"}}, step: "handshake", want: []string{"failed its handshake: didn't answer initialize"}, timeout: "300ms"},
+		"empty handshake":       {o: plugintest.Options{Args: []string{"-handshake", "empty"}}, step: "handshake", want: []string{"speaks protocol 0", "answer to initialize breaks the schema: result: missing property 'protocol'"}},
+		"malformed":             {o: plugintest.Options{Mode: "malformed"}, step: "refresh fixture", want: []string{"sent a malformed message"}},
+		"raw colours":           {o: plugintest.Options{Mode: "raw-colour"}, step: "refresh fixture", want: []string{`"#ff0000" is not a theme token`, "answer to widget/refresh breaks the schema: result: payload.lines.0.spans.0.token"}},
+		"unknown secret":        {o: plugintest.Options{Mode: "unknown-secret"}, step: "refresh fixture", want: []string{"sent setup naming Action `secret:password`, but Widget type `fixture` has no secret setting `password`"}},
+		"own secret Action":     {o: plugintest.Options{Mode: "own-secret"}, step: "refresh fixture", want: []string{"sent Action `secret:token`, but ids starting `secret:` are visor's own", "answer to widget/refresh breaks the schema: result: payload.actions.0.id"}},
+		"secret with a default": {manifest: "name = \"broken\"\nprotocol = 1\ncommand = \"x\"\n\n[[widget]]\ntype = \"x\"\ntitle = \"X\"\ndescription = \"X\"\n\n[[widget.setting]]\nname = \"token\"\nkind = \"secret\"\ndefault = \"abc\"\ndescription = \"A token\"\n", step: "manifest", want: []string{"`default` isn't allowed with this `kind`"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			s, home, stdout, stderr := sandbox(t, nil, "")

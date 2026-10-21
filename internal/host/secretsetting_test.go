@@ -27,9 +27,16 @@ type sessionLog string
 // session, and keyring standing in for the OS keyring.
 func installed(t *testing.T, source string, k *hosttest.Keyring, config string) (*hosttest.Host, sessionLog) {
 	t.Helper()
+	return installedWith(t, plugintest.Options{}, source, k, config)
+}
+
+// installedWith is installed with the fixture's manifest written from o.
+func installedWith(t *testing.T, o plugintest.Options, source string, k *hosttest.Keyring, config string) (*hosttest.Host, sessionLog) {
+	t.Helper()
 	root := t.TempDir()
 	log := filepath.Join(t.TempDir(), "session.jsonl")
-	dir := plugintest.Write(t, filepath.Join(paths.Under(root).Data, "plugins", "fixture"), plugintest.Options{Args: []string{"-log", log}})
+	o.Args = append(o.Args, "-log", log)
+	dir := plugintest.Write(t, filepath.Join(paths.Under(root).Data, "plugins", "fixture"), o)
 	if err := (plugin.Record{Source: source, Commit: "0123abc"}).Write(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -192,4 +199,47 @@ func TestASecretGoesOnlyToThePluginFromTheSourceItWasSetFor(t *testing.T) {
 	if got := log.opened(t)["fixture"]["token"]; got != secret {
 		t.Errorf("after the local Plugin set its own, the installed one opened with token %v", got)
 	}
+}
+
+func TestAMissingRequiredSecretNeedsSetupUntilItsSetWithoutRefreshingThePlugin(t *testing.T) {
+	h, log := installedWith(t, plugintest.Options{TokenRequired: true}, "octo/fixture", &hosttest.Keyring{}, fixtureWidget)
+	shows(t, h, "needs setup", "No token set", "Set token")
+	hides(t, h, "hello alpha")
+	if got := log.received(t, "widget/refresh"); len(got) != 0 {
+		t.Errorf("the Plugin was refreshed with no token: %v", got)
+	}
+
+	setToken(h, secret)
+	h.ReceiveUntil(func() bool { return strings.Contains(h.Screen(), "hello alpha (signed in)") })
+	hides(t, h, "needs setup")
+	noSecret(t, h, "after setting it")
+}
+
+func TestAPluginsSetupNamingASecretOffersTheHostsActionForIt(t *testing.T) {
+	h, log := installed(t, "octo/fixture", &hosttest.Keyring{}, fixtureWidget+"mode = \"rejected\"\n")
+	shows(t, h, "needs setup", "Fixture rejected the token", "⏎ Set token")
+
+	setToken(h, secret)
+	h.ReceiveUntil(func() bool { return strings.Contains(h.Screen(), "Saved the token to the keyring") })
+	noSecret(t, h, "after setting it")
+	if got := log.opened(t)["fixture"]["token"]; got != secret {
+		t.Errorf("the Widget last opened with token %v, want the secret", got)
+	}
+	if inv := log.received(t, "action/invoke"); len(inv) != 0 {
+		t.Errorf("the Plugin was asked to invoke %v", inv)
+	}
+}
+
+func TestAPluginsSetupNamingASecretItDoesntDeclareIsAnError(t *testing.T) {
+	h, _ := installed(t, "octo/fixture", &hosttest.Keyring{}, fixtureWidget+"mode = \"unknown-secret\"\n")
+	h.Resize(140, 12)
+	shows(t, h, "Plugin `fixture` sent setup naming Action `secret:password`, but Widget type `fixture` has no secret setting `password`")
+	hides(t, h, "needs setup")
+}
+
+func TestAPluginsOwnSecretPrefixedActionIsRejected(t *testing.T) {
+	h, _ := installed(t, "octo/fixture", &hosttest.Keyring{}, fixtureWidget+"mode = \"own-secret\"\n")
+	h.Resize(140, 12)
+	shows(t, h, "Plugin `fixture` sent Action `secret:token`, but ids starting `secret:` are visor's own")
+	hides(t, h, "my way")
 }

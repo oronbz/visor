@@ -45,11 +45,26 @@ func Check(dir string, o CheckOptions, out io.Writer) bool {
 		if m.Protocol != Protocol {
 			return "", fmt.Errorf("declares protocol %d, but this visor speaks %d", m.Protocol, Protocol)
 		}
-		var types []string
+		var types, secrets []string
 		for _, w := range m.Widgets {
 			types = append(types, w.Type)
+			for _, s := range w.Settings {
+				if kinds[s.Kind] != widget.Secret {
+					continue
+				}
+				if s.Required {
+					s.Name += " (required)"
+				}
+				if !slices.Contains(secrets, s.Name) {
+					secrets = append(secrets, s.Name)
+				}
+			}
 		}
-		return fmt.Sprintf("`%s`, Widget types: %s", m.Name, strings.Join(types, ", ")), nil
+		detail := fmt.Sprintf("`%s`, Widget types: %s", m.Name, strings.Join(types, ", "))
+		if len(secrets) > 0 {
+			detail += "; secret settings: " + strings.Join(secrets, ", ")
+		}
+		return detail, nil
 	})
 	p := &Plugin{name: m.Name, m: m, clock: o.Clock, widgets: map[string]*pluginWidget{}, tap: c.tap}
 	var proc *process
@@ -117,6 +132,8 @@ func (c *checker) lifecycle(p *Plugin, wt WidgetType) {
 		var limited *widget.RateLimitError
 		var f failure
 		switch {
+		case errors.As(err, &setup) && setup.Action != nil:
+			return fmt.Sprintf("needs setup: %s (⏎ %s)", setup.Hint, setup.Action.Label), nil
 		case errors.As(err, &setup):
 			return "needs setup: " + setup.Hint, nil
 		case errors.As(err, &limited):

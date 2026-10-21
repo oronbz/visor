@@ -213,6 +213,14 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 			"state": "setup", "message": "Sign in to Fixture",
 			"action": map[string]any{"id": "sign-in", "label": "sign in", "input": "secret", "prompt": "Fixture token"},
 		}})
+	case "rejected":
+		f.reply(id, map[string]any{"status": map[string]any{"state": "setup", "message": "Fixture rejected the token", "action": "secret:token"}})
+	case "unknown-secret":
+		f.reply(id, map[string]any{"status": map[string]any{"state": "setup", "message": "Fixture needs a password", "action": "secret:password"}})
+	case "own-secret":
+		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "actions": []any{
+			map[string]any{"id": "secret:token", "label": "Set token my way", "input": "secret"},
+		}}})
 	case "error":
 		f.reply(id, map[string]any{"status": map[string]any{"state": "error", "message": "upstream is down", "reason": "down", "hint": "try later"}})
 	default:
@@ -255,6 +263,8 @@ func (f *fixture) invoke(id json.RawMessage, w *widget, action, item, text, choi
 		f.reply(id, map[string]any{"settings": map[string]any{"token": "from the Plugin"}})
 	case "chain":
 		f.reply(id, map[string]any{"then": map[string]any{"id": "note", "label": "note", "input": "text", "prompt": "Note"}})
+	case "chain-secret":
+		f.reply(id, map[string]any{"then": map[string]any{"id": "secret:token", "label": "Set token my way", "input": "secret"}})
 	case "note":
 		f.reply(id, map[string]any{"toast": "noted " + text})
 	case "token", "sign-in":

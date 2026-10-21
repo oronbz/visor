@@ -11,19 +11,22 @@ import (
 	"github.com/gofrs/flock"
 
 	"github.com/oronbz/visor/internal/cli"
+	"github.com/oronbz/visor/internal/hosttest"
+	"github.com/oronbz/visor/internal/plugin"
 	"github.com/oronbz/visor/internal/plugin/plugintest"
 )
 
 // installs is a home for `visor plugin` commands, with GitHub faked.
 type installs struct {
-	t    *testing.T
-	home string
-	gh   *plugintest.GitHub
-	env  map[string]string
+	t       *testing.T
+	home    string
+	gh      *plugintest.GitHub
+	env     map[string]string
+	keyring *hosttest.Keyring
 }
 
 func newInstalls(t *testing.T) *installs {
-	return &installs{t: t, home: t.TempDir(), gh: plugintest.NewGitHub(t), env: map[string]string{}}
+	return &installs{t: t, home: t.TempDir(), gh: plugintest.NewGitHub(t), env: map[string]string{}, keyring: &hosttest.Keyring{}}
 }
 
 // visor runs visor with args and stdin, returning the exit code and output.
@@ -37,6 +40,7 @@ func (in *installs) visor(stdin string, args ...string) (int, string, string) {
 	}
 	pp, _ := hermetic(in.t, getenv)
 	pp.Endpoints.GitHubREST = in.gh.URL
+	pp.Keyring = in.keyring
 	var stdout, stderr bytes.Buffer
 	code := run(in.t, cli.System{Args: args, Getenv: getenv, Ports: pp, Stdin: strings.NewReader(stdin), Stdout: &stdout, Stderr: &stderr})
 	return code, stdout.String(), stderr.String()
@@ -304,6 +308,23 @@ func TestPluginUninstallDeletesTheFolder(t *testing.T) {
 	contains(t, "stderr", stderr, "Plugin `greet` isn't installed")
 	if _, _, stderr := in.visor("", "plugin", "uninstall", "../../.."); !strings.Contains(stderr, "isn't a Plugin name") {
 		t.Errorf("a path as the name: %s", stderr)
+	}
+}
+
+func TestPluginUninstallDeletesItsSecretsFromTheKeyring(t *testing.T) {
+	in := newInstalls(t)
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+	in.visor("", "plugin", "install", "-y", "octo/greet")
+	stored := plugin.Secrets{Keyring: in.keyring, Identity: "octo/greet"}
+	if err := stored.Set("token", "s3cr3t"); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _, stderr := in.visor("", "plugin", "uninstall", "greet"); code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	if got, ok := stored.Get("token"); ok {
+		t.Errorf("the keyring still holds %q", got)
 	}
 }
 
