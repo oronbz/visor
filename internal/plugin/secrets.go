@@ -1,11 +1,14 @@
 package plugin
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
-	"strings"
+	"slices"
+	"sync"
 
 	"github.com/oronbz/visor/internal/ports"
 	"github.com/oronbz/visor/internal/widget"
@@ -87,9 +90,24 @@ func (s Secrets) withSecrets(settings map[string]any, schema []widget.Setting) m
 	return out
 }
 
+// stored are the values the keyring holds for m's secret settings.
+func (s Secrets) stored(m Manifest) []string {
+	var values []string
+	for _, wt := range m.Widgets {
+		for _, st := range wt.Settings {
+			if kinds[st.Kind] != widget.Secret {
+				continue
+			}
+			if v, ok := s.Get(st.Name); ok {
+				values = append(values, v)
+			}
+		}
+	}
+	return values
+}
+
 // store keeps value as secret setting st, saying why it couldn't.
 func (s Secrets) store(st widget.Setting, value string) error {
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return fmt.Errorf("no %s entered", st.Label())
 	}
@@ -97,4 +115,74 @@ func (s Secrets) store(st widget.Setting, value string) error {
 		return fmt.Errorf("couldn't keep the %s in the keyring: %w", st.Label(), err)
 	}
 	return nil
+}
+
+// redactor masks a Plugin's stored secrets in all it sends visor, so one it
+// echoes is never drawn or logged.
+type redactor struct {
+	mu     sync.Mutex
+	values []string
+}
+
+func (r *redactor) add(values ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, v := range values {
+		if v != "" && !slices.Contains(r.values, v) {
+			r.values = append(r.values, v)
+		}
+	}
+}
+
+func (r *redactor) secrets() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.values)
+}
+
+func (r *redactor) string(s string) string { return widget.Redact(s, r.secrets()...) }
+
+// message is raw with every secret masked in its strings, still valid JSON.
+func (r *redactor) message(raw []byte) []byte {
+	secrets := r.secrets()
+	if !slices.ContainsFunc(secrets, func(s string) bool { return bytes.Contains(raw, []byte(s)) || bytes.Contains(raw, quoted(s)) }) {
+		return raw
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return raw
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(redacted(v, secrets)); err != nil {
+		return raw
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+}
+
+// quoted is s as a JSON string holds it, quotes aside.
+func quoted(s string) []byte {
+	b, _ := json.Marshal(s)
+	return b[1 : len(b)-1]
+}
+
+func redacted(v any, secrets []string) any {
+	switch v := v.(type) {
+	case string:
+		return widget.Redact(v, secrets...)
+	case []any:
+		for i, x := range v {
+			v[i] = redacted(x, secrets)
+		}
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, x := range v {
+			out[widget.Redact(k, secrets...)] = redacted(x, secrets)
+		}
+		return out
+	}
+	return v
 }

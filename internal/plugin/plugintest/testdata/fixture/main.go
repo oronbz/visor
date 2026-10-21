@@ -221,6 +221,15 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "actions": []any{
 			map[string]any{"id": "secret:token", "label": "Set token my way", "input": "secret"},
 		}}})
+	case "leak":
+		// Echoes the stored token on purpose: the host must mask it everywhere.
+		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "token "+token(w))}, "actions": []any{
+			map[string]any{"id": "leak-toast", "key": "t", "label": "leak toast"},
+			map[string]any{"id": "leak-error", "key": "e", "label": "leak error"},
+			map[string]any{"id": "leak-crash", "key": "x", "label": "leak crash"},
+		}}})
+	case "leak-status":
+		f.reply(id, map[string]any{"status": map[string]any{"state": "error", "message": "upstream refused " + token(w), "reason": "refused"}})
 	case "error":
 		f.reply(id, map[string]any{"status": map[string]any{"state": "error", "message": "upstream is down", "reason": "down", "hint": "try later"}})
 	default:
@@ -273,6 +282,14 @@ func (f *fixture) invoke(id json.RawMessage, w *widget, action, item, text, choi
 	case "crash":
 		fmt.Fprintln(os.Stderr, "fixture: boom")
 		os.Exit(3)
+	case "leak-toast":
+		f.reply(id, map[string]any{"toast": "signed in with " + token(w)})
+	case "leak-error":
+		f.fail(id, 1, "refused "+token(w))
+	case "leak-crash":
+		fmt.Fprintln(os.Stderr, "Traceback (most recent call last):")
+		fmt.Fprintln(os.Stderr, "fixture.AuthError: bad token "+token(w))
+		os.Exit(3)
 	default:
 		f.fail(id, 1, "no action "+action)
 	}
@@ -287,6 +304,14 @@ var widgetActions = []any{
 	map[string]any{"id": "crash", "key": "x", "label": "crash"},
 	map[string]any{"id": "greet", "key": "e", "label": "greet", "input": "text", "prompt": "Greeting"},
 	map[string]any{"id": "chain", "key": "n", "label": "chain"},
+}
+
+func token(w *widget) string {
+	if w == nil {
+		return ""
+	}
+	t, _ := w.Settings["token"].(string)
+	return t
 }
 
 func line(token, text string) map[string]any {

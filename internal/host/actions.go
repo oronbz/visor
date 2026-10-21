@@ -319,25 +319,17 @@ func (m Model) invoke(id string, a bound, text string) (Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		res, err := actor.Invoke(context.Background(), inv)
 		if secret {
-			res.Toast, err = redact(res.Toast, text), redactErr(err, text)
+			res.Toast, err = widget.Redact(res.Toast, text), redactErr(err, text)
 		}
 		return actedMsg{id: id, item: a.item, action: a.Action, result: res, err: err}
 	}
-}
-
-// redact hides a secret a Widget quoted back, so it can't reach a toast.
-func redact(s, secret string) string {
-	if secret == "" {
-		return s
-	}
-	return strings.ReplaceAll(s, secret, "••••")
 }
 
 func redactErr(err error, secret string) error {
 	if err == nil || secret == "" || !strings.Contains(err.Error(), secret) {
 		return err
 	}
-	return errors.New(redact(err.Error(), secret))
+	return errors.New(widget.Redact(err.Error(), secret))
 }
 
 // acted toasts an Action's result and, after a success, refreshes its Widget

@@ -33,6 +33,7 @@ func (e *RPCError) Error() string { return e.Message }
 // newline-delimited. Writes are queued, so senders never wait on the Plugin.
 type conn struct {
 	w      io.Writer
+	redact func(raw []byte) []byte
 	tap    func(out bool, raw []byte)
 	notify func(method string, params json.RawMessage)
 
@@ -46,12 +47,13 @@ type conn struct {
 	done chan struct{}
 }
 
-// newConn starts reading r and writing w. tap, when not nil, sees each
+// newConn starts reading r and writing w. redact rewrites each message read
+// first, so nothing sees what it masks. tap, when not nil, sees each
 // message as it's sent or read, before anything acts on it. notify receives
 // the Plugin's notifications on the reader's goroutine; closed is called
 // once with why the session ended, after every pending call has failed with it.
-func newConn(r io.Reader, w io.Writer, tap func(bool, []byte), notify func(string, json.RawMessage), closed func(error)) *conn {
-	c := &conn{w: w, tap: tap, notify: notify, pending: map[int64]chan message{}, wake: make(chan struct{}, 1), done: make(chan struct{})}
+func newConn(r io.Reader, w io.Writer, redact func([]byte) []byte, tap func(bool, []byte), notify func(string, json.RawMessage), closed func(error)) *conn {
+	c := &conn{w: w, redact: redact, tap: tap, notify: notify, pending: map[int64]chan message{}, wake: make(chan struct{}, 1), done: make(chan struct{})}
 	go c.write()
 	go func() { closed(c.read(r)) }()
 	return c
@@ -69,6 +71,7 @@ func (c *conn) read(r io.Reader) error {
 			}
 			return c.fail(err)
 		}
+		raw = c.redact(raw)
 		if c.tap != nil {
 			c.tap(false, raw)
 		}

@@ -243,3 +243,45 @@ func TestAPluginsOwnSecretPrefixedActionIsRejected(t *testing.T) {
 	shows(t, h, "Plugin `fixture` sent Action `secret:token`, but ids starting `secret:` are visor's own")
 	hides(t, h, "my way")
 }
+
+const leaking = fixtureWidget + "mode = \"leak\"\n"
+
+func TestASecretSetWhileThePluginRunsIsMaskedInAllItSendsBack(t *testing.T) {
+	h, _ := installed(t, "octo/fixture", &hosttest.Keyring{}, leaking)
+	shows(t, h, "token")
+	setToken(h, secret)
+	h.ReceiveUntil(func() bool { return strings.Contains(h.Screen(), "token ••••") })
+	noSecret(t, h, "in the payload")
+
+	runFromPalette(t, h, "leak toast")
+	shows(t, h, "signed in with ••••")
+	noSecret(t, h, "in a toast")
+
+	runFromPalette(t, h, "leak error")
+	shows(t, h, "refused ••••")
+	noSecret(t, h, "in an error")
+
+	runFromPalette(t, h, "leak crash")
+	h.ReceiveUntil(func() bool { return strings.Contains(h.Screen(), "stopped:") })
+	shows(t, h, "bad token ••••")
+	noSecret(t, h, "in the last stderr line")
+}
+
+func TestASecretStoredBeforeThePluginStartsIsMaskedInAllItSendsBack(t *testing.T) {
+	k := &hosttest.Keyring{}
+	first, _ := installed(t, "octo/fixture", k, fixtureWidget)
+	setToken(first, secret)
+	shows(t, first, "hello alpha (signed in)")
+
+	h, _ := installed(t, "octo/fixture", k, leaking)
+	shows(t, h, "token ••••")
+	noSecret(t, h, "in the payload")
+	runFromPalette(t, h, "leak crash")
+	h.ReceiveUntil(func() bool { return strings.Contains(h.Screen(), "stopped:") })
+	shows(t, h, "bad token ••••")
+	noSecret(t, h, "in the last stderr line")
+
+	status, _ := installed(t, "octo/fixture", k, fixtureWidget+"mode = \"leak-status\"\n")
+	shows(t, status, "upstream refused ••••")
+	noSecret(t, status, "in a Status message")
+}

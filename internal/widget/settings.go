@@ -57,6 +57,17 @@ func (s Setting) SetAction() Action {
 	return Action{ID: SecretPrefix + s.Name, Label: "Set " + s.Label(), Input: SecretInput, Prompt: s.Description, Target: s.Target}
 }
 
+// Redact masks every one of secrets in s, so a Widget quoting one back
+// can't put it on screen.
+func Redact(s string, secrets ...string) string {
+	for _, secret := range secrets {
+		if secret != "" {
+			s = strings.ReplaceAll(s, secret, "••••")
+		}
+	}
+	return s
+}
+
 // Check converts a decoded TOML value to the setting's Go type, or says why it doesn't fit.
 func (s Setting) Check(v any) (any, error) {
 	switch s.Kind {

@@ -202,6 +202,7 @@ type Plugin struct {
 	retry   time.Time
 	stopped error
 	closed  bool
+	masked  redactor
 	// tap, when set, sees every message in (out false) and out, as sent.
 	tap func(out bool, raw []byte)
 
@@ -287,7 +288,8 @@ func (p *Plugin) spawn() (*process, error) {
 		cmd.Env = append(os.Environ(), p.m.Env...)
 	}
 	cmd.WaitDelay = exitWait
-	proc := &process{cmd: cmd, started: p.clock.Now(), stderr: &tail{}, exited: make(chan struct{})}
+	p.masked.add(Secrets{p.keyring, p.identity}.stored(p.m)...)
+	proc := &process{cmd: cmd, started: p.clock.Now(), stderr: &tail{masked: &p.masked}, exited: make(chan struct{})}
 	cmd.Stderr = proc.stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -301,7 +303,7 @@ func (p *Plugin) spawn() (*process, error) {
 		return nil, p.withName(fmt.Errorf("didn't start: %w", err))
 	}
 	proc.stdin = stdin
-	proc.conn = newConn(stdout, stdin, p.tap, p.notified, func(err error) { p.ended(proc, err) })
+	proc.conn = newConn(stdout, stdin, p.masked.message, p.tap, p.notified, func(err error) { p.ended(proc, err) })
 	return proc, nil
 }
 
@@ -511,8 +513,9 @@ func (proc *process) exitReason(err error) error {
 
 // tail keeps the end of a Plugin's stderr, to say why it stopped.
 type tail struct {
-	mu  sync.Mutex
-	buf []byte
+	mu     sync.Mutex
+	buf    []byte
+	masked *redactor
 }
 
 func (t *tail) Write(b []byte) (int, error) {
@@ -529,10 +532,11 @@ func (t *tail) withLastLine(err any) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	lines := strings.Split(strings.TrimSpace(string(t.buf)), "\n")
+	msg := fmt.Sprint(err)
 	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
-		return fmt.Errorf("%v (%s)", err, last)
+		msg += " (" + last + ")"
 	}
-	return fmt.Errorf("%v", err)
+	return errors.New(t.masked.string(msg))
 }
 
 // pluginWidget adapts one Widget of a Plugin's type to the Widget contract.
@@ -627,9 +631,11 @@ func (w *pluginWidget) setSecret(name, value string) (widget.Result, error) {
 	if i < 0 {
 		return widget.Result{}, fmt.Errorf("Widget type `%s` has no secret setting `%s`", w.typ, name)
 	}
+	value = strings.TrimSpace(value)
 	if err := w.p.secrets().store(w.schema[i], value); err != nil {
 		return widget.Result{}, err
 	}
+	w.p.masked.add(value)
 	w.p.reopen(w)
 	return widget.Result{Toast: "Saved the " + w.schema[i].Label() + " to the keyring"}, nil
 }
