@@ -28,6 +28,10 @@ const (
 // SecretPrefix starts the id of every Secret setting's SetAction.
 const SecretPrefix = "secret:"
 
+// SecretName is the Secret setting a SetAction id sets; ok is false for
+// any other id.
+func SecretName(id string) (name string, ok bool) { return strings.CutPrefix(id, SecretPrefix) }
+
 // Setting is one key a Widget type accepts in its [[widget]] block.
 type Setting struct {
 	Name string
@@ -55,6 +59,11 @@ func (s Setting) Label() string { return strings.ReplaceAll(s.Name, "_", " ") }
 // SetAction is the Action that asks for a Secret setting in a masked prompt.
 func (s Setting) SetAction() Action {
 	return Action{ID: SecretPrefix + s.Name, Label: "Set " + s.Label(), Input: SecretInput, Prompt: s.Description, Target: s.Target}
+}
+
+// SetHint tells a user where a Secret setting is set instead of config.toml.
+func (s Setting) SetHint() string {
+	return fmt.Sprintf("set it with the Widget's %q Action", s.SetAction().Label)
 }
 
 // Redact masks every one of secrets in s, so a Widget quoting one back
@@ -102,7 +111,7 @@ func (s Setting) Check(v any) (any, error) {
 	case Tables:
 		return s.checkTables(v)
 	case Secret:
-		return nil, fmt.Errorf("is a secret, kept in the keyring: set it with the Widget's %q Action", s.SetAction().Label)
+		return nil, errors.New("is a secret, kept in the keyring: " + s.SetHint())
 	}
 	return nil, fmt.Errorf("has unknown kind %d", s.Kind)
 }

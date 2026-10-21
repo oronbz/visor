@@ -6,7 +6,6 @@ import (
 	"math"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/oronbz/visor/internal/widget"
@@ -140,24 +139,24 @@ func (a *statusAction) fix(typ string, schema []widget.Setting) (*widget.Action,
 	case a == nil:
 		return nil, nil
 	case a.own != nil:
-		return a.own, ownsNoSecret(*a.own)
+		return a.own, rejectReserved(*a.own)
 	}
-	name, ok := strings.CutPrefix(a.id, widget.SecretPrefix)
+	name, ok := widget.SecretName(a.id)
 	if !ok {
 		return nil, fmt.Errorf("sent setup naming Action `%s`, but only ids starting `%s` name visor's own", a.id, widget.SecretPrefix)
 	}
-	i := slices.IndexFunc(schema, func(s widget.Setting) bool { return s.Kind == widget.Secret && s.Name == name })
-	if i < 0 {
+	st, ok := secretSetting(schema, name)
+	if !ok {
 		return nil, fmt.Errorf("sent setup naming Action `%s`, but Widget type `%s` has no secret setting `%s`", a.id, typ, name)
 	}
-	set := schema[i].SetAction()
+	set := st.SetAction()
 	return &set, nil
 }
 
-// ownsNoSecret rejects a Plugin's Action whose id is one of visor's own.
-func ownsNoSecret(as ...widget.Action) error {
+// rejectReserved rejects a Plugin's Action whose id is one of visor's own.
+func rejectReserved(as ...widget.Action) error {
 	for _, a := range as {
-		if strings.HasPrefix(a.ID, widget.SecretPrefix) {
+		if _, ok := widget.SecretName(a.ID); ok {
 			return fmt.Errorf("sent Action `%s`, but ids starting `%s` are visor's own", a.ID, widget.SecretPrefix)
 		}
 	}
@@ -178,7 +177,7 @@ func (u update) read(dir, typ string, schema []widget.Setting) (*widget.Payload,
 			for _, it := range p.Items {
 				actions = append(actions, it.Actions...)
 			}
-			if err := ownsNoSecret(actions...); err != nil {
+			if err := rejectReserved(actions...); err != nil {
 				return nil, err
 			}
 			err = validateJSON("protocol.json#/$defs/payload", u.Payload)

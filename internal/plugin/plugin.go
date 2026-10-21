@@ -198,11 +198,11 @@ type Plugin struct {
 	keyring ports.Keyring
 	proc    *process
 	// fails counts crashes in a row; retry is when the process may start again.
-	fails   int
-	retry   time.Time
-	stopped error
-	closed  bool
-	masked  redactor
+	fails    int
+	retry    time.Time
+	stopped  error
+	closed   bool
+	redactor redactor
 	// tap, when set, sees every message in (out false) and out, as sent.
 	tap func(out bool, raw []byte)
 
@@ -225,7 +225,10 @@ func (p *Plugin) widget(typ string, schema []widget.Setting, c widget.Config) *p
 	w := &pluginWidget{p: p, id: c.ID, typ: typ, schema: schema, settings: settingsJSON(c.Settings)}
 	p.mu.Lock()
 	if p.clock == nil {
-		p.clock, p.keyring = c.Ports.Clock, c.Ports.Keyring
+		p.clock = c.Ports.Clock
+	}
+	if p.keyring == nil {
+		p.keyring = c.Ports.Keyring
 	}
 	p.mu.Unlock()
 	p.wmu.Lock()
@@ -288,8 +291,8 @@ func (p *Plugin) spawn() (*process, error) {
 		cmd.Env = append(os.Environ(), p.m.Env...)
 	}
 	cmd.WaitDelay = exitWait
-	p.masked.add(Secrets{p.keyring, p.identity}.stored(p.m)...)
-	proc := &process{cmd: cmd, started: p.clock.Now(), stderr: &tail{masked: &p.masked}, exited: make(chan struct{})}
+	p.redactor.add(Secrets{p.keyring, p.identity}.held(p.m)...)
+	proc := &process{cmd: cmd, started: p.clock.Now(), stderr: &tail{redactor: &p.redactor}, exited: make(chan struct{})}
 	cmd.Stderr = proc.stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -303,7 +306,7 @@ func (p *Plugin) spawn() (*process, error) {
 		return nil, p.withName(fmt.Errorf("didn't start: %w", err))
 	}
 	proc.stdin = stdin
-	proc.conn = newConn(stdout, stdin, p.masked.message, p.tap, p.notified, func(err error) { p.ended(proc, err) })
+	proc.conn = newConn(stdout, stdin, p.redactor.message, p.tap, p.notified, func(err error) { p.ended(proc, err) })
 	return proc, nil
 }
 
@@ -513,9 +516,9 @@ func (proc *process) exitReason(err error) error {
 
 // tail keeps the end of a Plugin's stderr, to say why it stopped.
 type tail struct {
-	mu     sync.Mutex
-	buf    []byte
-	masked *redactor
+	mu       sync.Mutex
+	buf      []byte
+	redactor *redactor
 }
 
 func (t *tail) Write(b []byte) (int, error) {
@@ -536,7 +539,7 @@ func (t *tail) withLastLine(err any) error {
 	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
 		msg += " (" + last + ")"
 	}
-	return errors.New(t.masked.string(msg))
+	return errors.New(t.redactor.string(msg))
 }
 
 // pluginWidget adapts one Widget of a Plugin's type to the Widget contract.
@@ -609,21 +612,21 @@ func (w *pluginWidget) missingSecret() error {
 // setSecret keeps value as secret setting name, which never reaches the
 // Plugin as an Action, and reopens the Plugin's Widgets with it.
 func (w *pluginWidget) setSecret(name, value string) (widget.Result, error) {
-	i := slices.IndexFunc(w.schema, func(s widget.Setting) bool { return s.Kind == widget.Secret && s.Name == name })
-	if i < 0 {
+	st, ok := secretSetting(w.schema, name)
+	if !ok {
 		return widget.Result{}, fmt.Errorf("Widget type `%s` has no secret setting `%s`", w.typ, name)
 	}
 	value = strings.TrimSpace(value)
-	if err := w.p.secrets().store(w.schema[i], value); err != nil {
+	if err := w.p.secrets().save(st, value); err != nil {
 		return widget.Result{}, err
 	}
-	w.p.masked.add(value)
+	w.p.redactor.add(value)
 	w.p.reopen(w)
-	return widget.Result{Toast: "Saved the " + w.schema[i].Label() + " to the keyring"}, nil
+	return widget.Result{Toast: "Saved the " + st.Label() + " to the keyring"}, nil
 }
 
 func (w *pluginWidget) Invoke(ctx context.Context, inv widget.Invocation) (widget.Result, error) {
-	if name, ok := strings.CutPrefix(inv.Action, widget.SecretPrefix); ok {
+	if name, ok := widget.SecretName(inv.Action); ok {
 		return w.setSecret(name, inv.Text)
 	}
 	if _, ok := ctx.Deadline(); !ok {
@@ -641,7 +644,7 @@ func (w *pluginWidget) Invoke(ctx context.Context, inv widget.Invocation) (widge
 		return widget.Result{}, w.p.callErr(err)
 	}
 	if res.Then != nil {
-		if err := ownsNoSecret(*res.Then); err != nil {
+		if err := rejectReserved(*res.Then); err != nil {
 			return widget.Result{}, w.p.withName(err)
 		}
 	}

@@ -26,7 +26,7 @@ func Reference(types []widget.Type, loc Locale) string {
 	setting := func(s widget.Setting) {
 		prose("%s", s.Description)
 		if s.Kind == widget.Secret {
-			wrapped(fmt.Sprintf("A secret, kept in the keyring, never in this file: set it with the Widget's %q Action.", s.SetAction().Label))
+			wrapped("A secret, kept in the keyring, never in this file: " + s.SetHint() + ".")
 			prose("Why: %s", s.Why)
 			return
 		}

@@ -59,17 +59,12 @@ func (s Secrets) Set(name, value string) error {
 // it can't read, never stored or with no keyring to hold it, is already gone.
 func (s Secrets) Forget(m Manifest) error {
 	var errs []error
-	for _, wt := range m.Widgets {
-		for _, st := range wt.Settings {
-			if kinds[st.Kind] != widget.Secret {
-				continue
-			}
-			if _, ok := s.Get(st.Name); !ok {
-				continue
-			}
-			if err := s.Keyring.Delete(keyringService, s.account(st.Name)); err != nil && !errors.Is(err, ports.ErrSecretNotFound) {
-				errs = append(errs, fmt.Errorf("couldn't delete its %s from the keyring: %w", st.Name, err))
-			}
+	for st := range m.secrets() {
+		if _, ok := s.Get(st.Name); !ok {
+			continue
+		}
+		if err := s.Keyring.Delete(keyringService, s.account(st.Name)); err != nil && !errors.Is(err, ports.ErrSecretNotFound) {
+			errs = append(errs, fmt.Errorf("couldn't delete its %s from the keyring: %w", st.Name, err))
 		}
 	}
 	return errors.Join(errs...)
@@ -90,24 +85,19 @@ func (s Secrets) withSecrets(settings map[string]any, schema []widget.Setting) m
 	return out
 }
 
-// stored are the values the keyring holds for m's secret settings.
-func (s Secrets) stored(m Manifest) []string {
+// held are the values the keyring holds for m's secret settings.
+func (s Secrets) held(m Manifest) []string {
 	var values []string
-	for _, wt := range m.Widgets {
-		for _, st := range wt.Settings {
-			if kinds[st.Kind] != widget.Secret {
-				continue
-			}
-			if v, ok := s.Get(st.Name); ok {
-				values = append(values, v)
-			}
+	for st := range m.secrets() {
+		if v, ok := s.Get(st.Name); ok {
+			values = append(values, v)
 		}
 	}
 	return values
 }
 
-// store keeps value as secret setting st, saying why it couldn't.
-func (s Secrets) store(st widget.Setting, value string) error {
+// save keeps value as secret setting st, saying why it couldn't.
+func (s Secrets) save(st widget.Setting, value string) error {
 	if value == "" {
 		return fmt.Errorf("no %s entered", st.Label())
 	}

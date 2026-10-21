@@ -3,6 +3,7 @@ package plugin
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -126,6 +127,28 @@ func parseManifest(src []byte) (Manifest, error) {
 		}
 	}
 	return m, nil
+}
+
+// secrets are the secret settings m's Widget types declare.
+func (m Manifest) secrets() iter.Seq[Setting] {
+	return func(yield func(Setting) bool) {
+		for _, wt := range m.Widgets {
+			for _, s := range wt.Settings {
+				if kinds[s.Kind] == widget.Secret && !yield(s) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// secretSetting is the secret setting called name in schema.
+func secretSetting(schema []widget.Setting, name string) (widget.Setting, bool) {
+	i := slices.IndexFunc(schema, func(s widget.Setting) bool { return s.Kind == widget.Secret && s.Name == name })
+	if i < 0 {
+		return widget.Setting{}, false
+	}
+	return schema[i], true
 }
 
 // widgetType is w as the Widget contract declares types, New aside.

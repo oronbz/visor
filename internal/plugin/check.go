@@ -48,16 +48,13 @@ func Check(dir string, o CheckOptions, out io.Writer) bool {
 		var types, secrets []string
 		for _, w := range m.Widgets {
 			types = append(types, w.Type)
-			for _, s := range w.Settings {
-				if kinds[s.Kind] != widget.Secret {
-					continue
-				}
-				if s.Required {
-					s.Name += " (required)"
-				}
-				if !slices.Contains(secrets, s.Name) {
-					secrets = append(secrets, s.Name)
-				}
+		}
+		for s := range m.secrets() {
+			if s.Required {
+				s.Name += " (required)"
+			}
+			if !slices.Contains(secrets, s.Name) {
+				secrets = append(secrets, s.Name)
 			}
 		}
 		detail := fmt.Sprintf("`%s`, Widget types: %s", m.Name, strings.Join(types, ", "))
