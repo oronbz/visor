@@ -46,10 +46,11 @@ const usage = `Usage: visor [--config <path>] [--close-key <keys>]... [--version
        visor config init      write the reference to the config path, once
        visor auth jira        set up Jira: site, email and an API token,
                              which goes only to the keyring
-       visor plugin install <name | owner/repo[/subdir]> [--ref <ref>] [-y]
+       visor plugin install <name | owner/repo[/subdir]> [--ref <ref>] [--no-widget] [-y]
                              fetch a Plugin from GitHub, show what it
-                             runs, ask for trust, then build it; a bare
-                             name is a folder of oronbz/visor-plugins
+                             runs, ask for trust, then build it and add
+                             a Widget of its type; a bare name is a
+                             folder of oronbz/visor-plugins
        visor plugin update [name...] [-y]
                              rebuild installed Plugins that have new commits
        visor plugin uninstall <name>
@@ -130,8 +131,12 @@ func Run(s System) int {
 		}
 		return config.Reference(types, locale)
 	}
+	editor := func() config.Editor {
+		types, _ := host.Types(p, configFile, bundle, locale, s.Getenv)
+		return config.NewEditor(configFile, p.Data, types, locale)
+	}
 	if args := fs.Args(); len(args) > 0 && args[0] == "plugin" {
-		return pluginCommand(s, pp, p, configFile, locale, args[1:])
+		return pluginCommand(s, pp, p, configFile, locale, editor, args[1:])
 	}
 	if args := fs.Args(); len(args) > 0 && args[0] == "skills" {
 		return skillsCommand(s, args[1:])
@@ -144,8 +149,7 @@ func Run(s System) int {
 	case "config init":
 		return configInit(s, configFile, reference())
 	case "auth jira":
-		types, _ := host.Types(p, configFile, bundle, locale, s.Getenv)
-		return authJira(s, pp, config.NewEditor(configFile, p.Data, types, locale))
+		return authJira(s, pp, editor())
 	default:
 		fmt.Fprintf(s.Stderr, "visor: unknown command %q\n\n%s", strings.Join(fs.Args(), " "), usage)
 		return 2

@@ -12,7 +12,7 @@ import (
 	"github.com/oronbz/visor/internal/ports"
 )
 
-func pluginCommand(s System, pp ports.Ports, p paths.Paths, configFile string, locale config.Locale, args []string) int {
+func pluginCommand(s System, pp ports.Ports, p paths.Paths, configFile string, locale config.Locale, editor func() config.Editor, args []string) int {
 	if len(args) == 0 {
 		fmt.Fprint(s.Stderr, "visor: plugin needs a command\n\n", usage)
 		return 2
@@ -24,7 +24,7 @@ func pluginCommand(s System, pp ports.Ports, p paths.Paths, configFile string, l
 	case "check":
 		return pluginCheck(s, pp, args[1:])
 	case "install", "update", "uninstall", "list":
-		return pluginManage(s, pp, p, configFile, locale, args)
+		return pluginManage(s, pp, p, configFile, locale, editor, args)
 	}
 	fmt.Fprintf(s.Stderr, "visor: unknown command \"plugin %s\"\n\n%s", args[0], usage)
 	return 2

@@ -7,7 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -25,13 +27,13 @@ import (
 
 const fetchTimeout = 5 * time.Minute
 
-func pluginManage(s System, pp ports.Ports, p paths.Paths, configFile string, locale config.Locale, args []string) int {
+func pluginManage(s System, pp ports.Ports, p paths.Paths, configFile string, locale config.Locale, editor func() config.Editor, args []string) int {
 	c := pluginCLI{s: s, in: bufio.NewReader(s.Stdin), installer: install.Installer{
 		Dir:     filepath.Join(p.Data, "plugins"),
 		Fetcher: githubFetcher(s.Getenv, pp),
 		Keyring: pp.Keyring,
 		Log:     s.Stderr,
-	}}
+	}, editor: editor}
 	if args[0] != "list" {
 		unlock, err := lockPlugins(p.Data)
 		if err != nil {
@@ -82,6 +84,8 @@ type pluginCLI struct {
 	in        *bufio.Reader
 	installer install.Installer
 	yes       bool
+	// editor is called after an install, so it knows the new Widget type.
+	editor func() config.Editor
 }
 
 // parse reads flags wherever they sit among the positional arguments.
@@ -109,9 +113,10 @@ func (c *pluginCLI) fail(err error) int {
 func (c *pluginCLI) install(args []string) int {
 	fs := flag.NewFlagSet("visor plugin install", flag.ContinueOnError)
 	ref := fs.String("ref", "", "the branch, tag or commit to install")
+	noWidget := fs.Bool("no-widget", false, "don't add a Widget of the Plugin's type to config.toml")
 	rest, ok := c.parse(fs, args)
 	if !ok || len(rest) != 1 {
-		fmt.Fprintln(c.s.Stderr, "Usage: visor plugin install <name | owner/repo[/subdir]> [--ref <ref>] [-y]")
+		fmt.Fprintln(c.s.Stderr, "Usage: visor plugin install <name | owner/repo[/subdir]> [--ref <ref>] [--no-widget] [-y]")
 		return 2
 	}
 	src, err := install.ParseSource(rest[0])
@@ -125,7 +130,48 @@ func (c *pluginCLI) install(args []string) int {
 		return c.fail(err)
 	}
 	fmt.Fprintf(c.s.Stdout, "Installed %s from %s\n", plan.Manifest.Name, at(plan.Record))
+	if !*noWidget {
+		c.place(plan.Manifest)
+	}
 	return 0
+}
+
+// place adds a Widget of the Plugin's Widget type to config.toml, unless
+// one is placed already, such as a block an uninstall left behind. A Plugin
+// with several Widget types leaves the pick to the user.
+func (c *pluginCLI) place(m plugin.Manifest) {
+	e := c.editor()
+	switch {
+	case len(m.Widgets) == 0:
+		return
+	case len(m.Widgets) > 1:
+		var adds []string
+		for _, wt := range m.Widgets {
+			if placed, _ := e.Placed(wt.Type); !placed {
+				adds = append(adds, "add "+wt.Title+" Widget")
+			}
+		}
+		if len(adds) > 0 {
+			fmt.Fprintf(c.s.Stdout, "%s has several Widget types; add the ones you want with ctrl+k in visor: %s\n", m.Name, strings.Join(adds, ", "))
+		}
+		return
+	}
+	placed, defaults := e.Placed(m.Widgets[0].Type)
+	if placed {
+		return
+	}
+	_, statErr := os.Stat(e.Path)
+	w, err := e.AddWidget(m.Widgets[0].Type)
+	switch {
+	case err != nil:
+		fmt.Fprintf(c.s.Stderr, "visor: %s is installed, but no Widget was added: %v\n", m.Name, err)
+	case errors.Is(statErr, fs.ErrNotExist):
+		fmt.Fprintf(c.s.Stdout, "Wrote %s with the default Widgets and Widget %s\n", e.Path, w.ID)
+	case defaults:
+		fmt.Fprintf(c.s.Stdout, "Added Widget %s to %s, writing out the default Widgets it showed\n", w.ID, e.Path)
+	default:
+		fmt.Fprintf(c.s.Stdout, "Added Widget %s to %s\n", w.ID, e.Path)
+	}
 }
 
 func (c *pluginCLI) update(args []string) int {

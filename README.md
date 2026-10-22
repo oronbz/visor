@@ -223,7 +223,7 @@ visor plugin update [name...]
 visor plugin uninstall <name>
 ```
 
-Before it builds anything, `install` shows the Plugin's Widget types and every build command it will run, and asks you to trust it (`-y` skips the question). Installing a Plugin means trusting its code, the same as `herdr plugin install`. Plugins go to `~/.local/share/visor/plugins/<name>/`, and running instances pick up an install, update or uninstall without a restart.
+Before it builds anything, `install` shows the Plugin's Widget types and every build command it will run, and asks you to trust it (`-y` skips the question). Installing a Plugin means trusting its code, the same as `herdr plugin install`. Once it's built, `install` adds a Widget of the Plugin's type to `config.toml`, unless one is there already or you pass `--no-widget`. A Plugin with several Widget types gets none; add the ones you want with `ctrl+k` and Add Widget. Plugins go to `~/.local/share/visor/plugins/<name>/`, and running instances pick up an install, update or uninstall without a restart.
 
 A bare name installs that folder of the official repo, [oronbz/visor-plugins](https://github.com/oronbz/visor-plugins), so `visor plugin install bitrise` is `visor plugin install oronbz/visor-plugins/bitrise`. To find more Plugins, look for the [`visor-plugin` topic](https://github.com/topics/visor-plugin) on GitHub.
 

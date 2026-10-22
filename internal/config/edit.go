@@ -124,6 +124,16 @@ func (e Editor) AddWidget(typ string) (Widget, error) {
 	return added, err
 }
 
+// Placed says config.toml places a Widget of type typ. Defaults says it
+// shows the default set, which an edit writes out as blocks first.
+func (e Editor) Placed(typ string) (placed, defaults bool) {
+	c, err := Load(e.Path, e.Types, e.Locale)
+	if err != nil {
+		return false, false
+	}
+	return slices.ContainsFunc(c.Widgets, func(w Widget) bool { return w.Type == typ }), !explicit(c)
+}
+
 // RemoveWidget comments out Widget r's block, every line of it, so the user
 // can bring it back by uncommenting.
 func (e Editor) RemoveWidget(r Ref) error {

@@ -61,6 +61,19 @@ func (in *installs) installed() []string {
 	return names
 }
 
+func (in *installs) config() string {
+	return filepath.Join(in.home, ".config", "visor", "config.toml")
+}
+
+func (in *installs) readConfig() string {
+	in.t.Helper()
+	b, err := os.ReadFile(in.config())
+	if err != nil {
+		in.t.Fatal(err)
+	}
+	return string(b)
+}
+
 // greetPlugin is a Plugin whose build copies the fixture into its
 // directory and whose command runs that copy.
 func greetPlugin(t *testing.T, dir string, extra map[string]string) map[string]string {
@@ -98,6 +111,143 @@ func TestPluginInstallFetchesBuildsAndMakesTheWidgetTypeAvailable(t *testing.T) 
 	}
 	_, ref, _ := in.visor("", "config", "default")
 	contains(t, "config default", ref, `type = "greet"`)
+}
+
+func TestPluginInstallPlacesAWidgetOfItsType(t *testing.T) {
+	in := newInstalls(t)
+	writeFile(t, in.config(), titledClock("Mine"))
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+
+	code, stdout, stderr := in.visor("", "plugin", "install", "octo/greet", "-y")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	contains(t, "stdout", stdout, "Added Widget greet to "+in.config())
+	got := in.readConfig()
+	if !strings.HasPrefix(got, titledClock("Mine")) {
+		t.Errorf("config.toml lost what was there:\n%s", got)
+	}
+	contains(t, "config.toml", got, "[[widget]]\ntype = \"greet\"\nid = \"greet\"")
+}
+
+func TestPluginInstallWithNoConfigWritesItAndSaysSo(t *testing.T) {
+	in := newInstalls(t)
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+
+	code, stdout, stderr := in.visor("", "plugin", "install", "octo/greet", "-y")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	contains(t, "stdout", stdout, "Wrote "+in.config()+" with the default Widgets and Widget greet")
+	contains(t, "config.toml", in.readConfig(), "type = \"clock\"", "[[widget]]\ntype = \"greet\"\nid = \"greet\"")
+}
+
+func TestPluginInstallKeepsThePluginWhenTheConfigWontParse(t *testing.T) {
+	in := newInstalls(t)
+	broken := "[[widget]\ntype = \"clock\"\n"
+	writeFile(t, in.config(), broken)
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+
+	code, stdout, stderr := in.visor("", "plugin", "install", "octo/greet", "-y")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	contains(t, "stdout", stdout, "Installed greet")
+	contains(t, "stderr", stderr, "greet is installed, but no Widget was added")
+	if got := in.readConfig(); got != broken {
+		t.Errorf("config.toml changed:\n%s", got)
+	}
+}
+
+func TestPluginInstallPlacesNoSecondWidgetOfItsType(t *testing.T) {
+	t.Run("a block left from an earlier install", func(t *testing.T) {
+		in := newInstalls(t)
+		before := titledClock("Mine") + "\n[[widget]]\ntype = \"greet\"\ntitle = \"Kept\"\n"
+		writeFile(t, in.config(), before)
+		in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+
+		code, stdout, stderr := in.visor("", "plugin", "install", "octo/greet", "-y")
+		if code != 0 {
+			t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+		}
+		if strings.Contains(stdout, "Added Widget") {
+			t.Errorf("stdout says a Widget was added:\n%s", stdout)
+		}
+		if got := in.readConfig(); got != before {
+			t.Errorf("config.toml changed:\n%s", got)
+		}
+	})
+	t.Run("a type the default set places", func(t *testing.T) {
+		in := newInstalls(t)
+		in.gh.Push("octo/greet", "main", map[string]string{
+			"visor-plugin.toml": plugintest.Manifest(t, plugintest.Options{Name: "greet", Default: true}),
+		})
+
+		code, stdout, stderr := in.visor("", "plugin", "install", "octo/greet", "-y")
+		if code != 0 {
+			t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+		}
+		if strings.Contains(stdout, "Added Widget") {
+			t.Errorf("stdout says a Widget was added:\n%s", stdout)
+		}
+		if _, err := os.Stat(in.config()); err == nil {
+			t.Error("config.toml was written")
+		}
+	})
+}
+
+func TestPluginInstallWithSeveralWidgetTypesLeavesThePickToTheUser(t *testing.T) {
+	in := newInstalls(t)
+	writeFile(t, in.config(), titledClock("Mine"))
+	manifest := plugintest.Manifest(t, plugintest.Options{Name: "greet"}) +
+		"\n[[widget]]\ntype = \"wave\"\ntitle = \"Wave\"\ndescription = \"Waves\"\n"
+	in.gh.Push("octo/greet", "main", map[string]string{"visor-plugin.toml": manifest})
+
+	code, stdout, stderr := in.visor("", "plugin", "install", "octo/greet", "-y")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	contains(t, "stdout", stdout, "add Fixture Widget, add Wave Widget")
+	if strings.Contains(stdout, "Added Widget") {
+		t.Errorf("stdout says a Widget was added:\n%s", stdout)
+	}
+	if got := in.readConfig(); got != titledClock("Mine") {
+		t.Errorf("config.toml changed:\n%s", got)
+	}
+}
+
+func TestPluginInstallWithNoWidgetLeavesTheConfigAlone(t *testing.T) {
+	in := newInstalls(t)
+	writeFile(t, in.config(), titledClock("Mine"))
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+
+	code, stdout, stderr := in.visor("", "plugin", "install", "--no-widget", "octo/greet", "-y")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	contains(t, "stdout", stdout, "Installed greet")
+	if got := in.readConfig(); got != titledClock("Mine") {
+		t.Errorf("config.toml changed:\n%s", got)
+	}
+}
+
+func TestPluginUpdateAddsNoWidget(t *testing.T) {
+	in := newInstalls(t)
+	writeFile(t, in.config(), titledClock("Mine"))
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", nil))
+	if code, _, stderr := in.visor("", "plugin", "install", "--no-widget", "octo/greet", "-y"); code != 0 {
+		t.Fatalf("install: exit %d, stderr:\n%s", code, stderr)
+	}
+	in.gh.Push("octo/greet", "main", greetPlugin(t, "", map[string]string{"NEWS": "v2"}))
+
+	code, stdout, stderr := in.visor("", "plugin", "update", "greet", "-y")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr:\n%s", code, stderr)
+	}
+	contains(t, "stdout", stdout, "Updated greet")
+	if got := in.readConfig(); got != titledClock("Mine") {
+		t.Errorf("config.toml changed:\n%s", got)
+	}
 }
 
 func TestPluginInstallFromASubdirectoryAtARefAsksForTrust(t *testing.T) {
