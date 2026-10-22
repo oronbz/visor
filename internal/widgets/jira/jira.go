@@ -120,7 +120,7 @@ type issueJSON struct {
 			Name           string
 			StatusCategory struct{ Key string }
 		}
-		Issuetype *issueType
+		Issuetype *issueTypeJSON
 	}
 }
 
@@ -170,7 +170,7 @@ func (w jira) payload(issues []issueJSON) widget.Payload {
 		p.Empty = "Nothing assigned to you."
 	}
 	for _, is := range issues {
-		glyph, tok := kind(is.Fields.Issuetype)
+		glyph, tok := issueType(is.Fields.Issuetype)
 		p.Items = append(p.Items, widget.Item{
 			ID: is.Key,
 			Fields: []widget.Field{
@@ -188,14 +188,14 @@ func (w jira) payload(issues []issueJSON) widget.Payload {
 	return p
 }
 
-type issueType struct {
+type issueTypeJSON struct {
 	Name    string
 	Subtask bool
 }
 
-// kind is the glyph for an issue's type, coloured as Jira colours it; a
+// issueType is the glyph for an issue's type, coloured as Jira colours it; a
 // site's own types, such as "Infra Task", go by the stock type they name.
-func kind(t *issueType) (string, theme.Token) {
+func issueType(t *issueTypeJSON) (string, theme.Token) {
 	if t == nil {
 		return "·", theme.Faint
 	}

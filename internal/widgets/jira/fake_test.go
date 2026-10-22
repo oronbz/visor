@@ -42,9 +42,9 @@ const apiRoute = "/ex/jira/" + cloudID
 type issue struct {
 	key, summary, status string
 	// category is the status category key: new, indeterminate or done.
-	category string
-	// kind is the issue type's name; a "Sub-task" is flagged as one.
-	kind string
+	category  string
+	issueType string
+	subtask   bool
 	// transitions are offered by the issue; a trailing "!" on a name means
 	// the transition has a required field.
 	transitions []transition
@@ -123,14 +123,14 @@ func (j *fakeJira) search(w http.ResponseWriter, q url.Values) {
 	to := min(from+j.page, len(all))
 	var issues []any
 	for _, is := range all[from:to] {
-		var kind any
-		if is.kind != "" {
-			kind = map[string]any{"name": is.kind, "subtask": is.kind == "Sub-task"}
+		var issueType any
+		if is.issueType != "" {
+			issueType = map[string]any{"name": is.issueType, "subtask": is.subtask}
 		}
 		issues = append(issues, map[string]any{"id": "1" + is.key, "key": is.key, "fields": map[string]any{
 			"summary":   is.summary,
 			"status":    map[string]any{"name": is.status, "statusCategory": map[string]any{"key": is.category}},
-			"issuetype": kind,
+			"issuetype": issueType,
 		}})
 	}
 	page := map[string]any{"issues": issues, "isLast": to == len(all)}

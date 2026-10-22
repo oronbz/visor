@@ -26,10 +26,10 @@ func queue(t *testing.T) *fakeJira {
 	j := newJira(t)
 	j.page = 2
 	j.issues = []issue{
-		{key: "OPS-12", summary: "Rotate the TLS certificates", status: "In Progress", category: "indeterminate", kind: "Story"},
-		{key: "OPS-9", summary: "Upgrade Postgres to 17", status: "To Do", category: "new", kind: "Bug"},
-		{key: "WEB-140", summary: "Dark mode for settings", status: "In Review", category: "indeterminate", kind: "Epic"},
-		{key: "WEB-133", summary: "Fix the flaky checkout test", status: "To Do", category: "new", kind: "Sub-task"},
+		{key: "OPS-12", summary: "Rotate the TLS certificates", status: "In Progress", category: "indeterminate", issueType: "Story"},
+		{key: "OPS-9", summary: "Upgrade Postgres to 17", status: "To Do", category: "new", issueType: "Bug"},
+		{key: "WEB-140", summary: "Dark mode for settings", status: "In Review", category: "indeterminate", issueType: "Epic"},
+		{key: "WEB-133", summary: "Fix the flaky checkout test", status: "To Do", category: "new", issueType: "Sub-task", subtask: true},
 		{key: "API-7", summary: "Document the rate limits", status: "Backlog", category: "new"},
 	}
 	return j
@@ -88,7 +88,7 @@ func TestJiraListsAssignedIssuesFollowingTheSearchCursor(t *testing.T) {
 	for _, c := range []struct {
 		text string
 		want theme.Token
-	}{{"In Progress", theme.Accent}, {"To Do", theme.Dim}, {"◆", theme.Ok}, {"●", theme.Bad}, {"✦", theme.Info}, {"↳", theme.Dim}} {
+	}{{"In Progress", theme.Accent}, {"To Do", theme.Dim}} {
 		x, y, ok := h.Find(c.text)
 		if !ok {
 			t.Errorf("%q not on screen", c.text)
@@ -112,6 +112,51 @@ func TestJiraListsAssignedIssuesFollowingTheSearchCursor(t *testing.T) {
 		}
 		if got, want := s[i].Auth, basic("oron@acme.io", "env-token"); got != want {
 			t.Errorf("search %d Authorization %q, want %q", i+1, got, want)
+		}
+	}
+}
+
+func TestJiraLeadsEachIssueWithItsTypeInJirasColours(t *testing.T) {
+	j := newJira(t)
+	for _, is := range []issue{
+		{key: "STORY-1", issueType: "Story"},
+		{key: "BUG-1", issueType: "Bug"},
+		{key: "EPIC-1", issueType: "Epic"},
+		{key: "TASK-1", issueType: "Task"},
+		{key: "INFRA-1", issueType: "Infra Task"},
+		{key: "PROD-1", issueType: "Product Task"},
+		{key: "SUB-1", issueType: "Sub-task", subtask: true},
+		{key: "CHILD-1", issueType: "Child Issue", subtask: true},
+		{key: "SPIKE-1", issueType: "Spike"},
+		{key: "NONE-1"},
+	} {
+		is.summary, is.status, is.category = "Work", "To Do", "new"
+		j.issues = append(j.issues, is)
+	}
+	h := withJira(t, j, hosttest.Options{Width: 80, Height: 16})
+
+	for _, c := range []struct {
+		key, glyph string
+		want       theme.Token
+	}{
+		{"STORY-1", "◆", theme.Ok},
+		{"BUG-1", "●", theme.Bad},
+		{"EPIC-1", "✦", theme.Info},
+		{"TASK-1", "✓", theme.Accent},
+		{"INFRA-1", "✓", theme.Accent},
+		{"PROD-1", "✓", theme.Accent},
+		{"SUB-1", "↳", theme.Dim},
+		{"CHILD-1", "↳", theme.Dim},
+		{"SPIKE-1", "·", theme.Faint},
+		{"NONE-1", "·", theme.Faint},
+	} {
+		x, y, ok := h.Find(c.glyph + " " + c.key)
+		if !ok {
+			t.Errorf("%s not led by %q:\n%s", c.key, c.glyph, strings.Join(rows(h), "\n"))
+			continue
+		}
+		if got, _ := h.Fg(x, y); got != c.want {
+			t.Errorf("%s's %q drawn in %v, want %v", c.key, c.glyph, got, c.want)
 		}
 	}
 }
