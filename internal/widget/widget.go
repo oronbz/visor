@@ -254,8 +254,8 @@ type Item struct {
 	Group   string   `json:"group,omitempty"`
 	Fields  []Field  `json:"fields"`
 	Actions []Action `json:"actions,omitempty"`
-	// Values name what the Item is, such as {"key": "GETT-123"}, for the
-	// user's custom Actions to fill their {{key}} templates with.
+	// Values name what the Item is, such as {"ticket": "GETT-123"}, for the
+	// user's custom Actions to fill their {{ticket}} templates with.
 	Values map[string]string `json:"values,omitempty"`
 }
 

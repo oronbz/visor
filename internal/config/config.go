@@ -82,7 +82,7 @@ var ActionsSetting = widget.Setting{
 	Description: "Each is a command template: {{name}} is the selected Item's value for name, " +
 		"shell-quoted; a template without one acts on the whole Widget. Every Item has {{id}}, {{title}} and, " +
 		"when it opens a page, {{url}}; script Items have each key they print, and Plugins may name more.",
-	Why: `Act on what any Widget lists, such as [{ key = "f", label = "fix bug", run = "~/bin/fix-bug {{key}}", confirm = true }].`,
+	Why: `Act on what any Widget lists, such as [{ key = "f", label = "fix bug", run = "~/bin/fix-bug {{id}}", confirm = true }].`,
 	Fields: []widget.Setting{
 		{Name: "run", Kind: widget.String, Default: "", Required: true, Description: "The command template, run by sh (cmd on Windows)."},
 		{Name: "label", Kind: widget.String, Default: "", Required: true, Description: "What the Action is called in hints and the palette."},

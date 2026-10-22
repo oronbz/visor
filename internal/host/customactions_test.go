@@ -23,7 +23,7 @@ func ran(t *testing.T, dir string) string {
 func TestACustomActionOnAPluginWidgetRunsWithTheItemsValuesQuotedThenRefreshes(t *testing.T) {
 	dir := t.TempDir()
 	h := withPlugin(t, plugintest.Options{}, fixtureWidget+fmt.Sprintf(
-		`actions = [{ key = "f", label = "fix", run = "cd %s && printf '%%s\n' {{key}} >> ran" }]`+"\n", dir))
+		`actions = [{ key = "f", label = "fix", run = "cd %s && printf '%%s\n' {{ticket}} >> ran" }]`+"\n", dir))
 	shows(t, h, "refresh 1")
 
 	h.Press("tab", "f")
@@ -50,7 +50,7 @@ func TestEveryItemNamesItsIdTitleAndTheUrlItOpens(t *testing.T) {
 func TestAnItemWithoutAValueTheTemplateNamesHasNoSuchAction(t *testing.T) {
 	dir := t.TempDir()
 	h := withPlugin(t, plugintest.Options{}, fixtureWidget+fmt.Sprintf(
-		`actions = [{ key = "f", label = "fix", run = "cd %s && echo {{key}} >> ran" }]`+"\n", dir))
+		`actions = [{ key = "f", label = "fix", run = "cd %s && echo {{ticket}} >> ran" }]`+"\n", dir))
 
 	h.Press("tab")
 	if bottom := h.Line(10); !strings.Contains(bottom, "f fix") {
@@ -58,7 +58,7 @@ func TestAnItemWithoutAValueTheTemplateNamesHasNoSuchAction(t *testing.T) {
 	}
 	h.Press("j")
 	if bottom := h.Line(10); strings.Contains(bottom, "f fix") {
-		t.Errorf("bottom border %q on bravo, which has no key, has the f fix hint", bottom)
+		t.Errorf("bottom border %q on bravo, which has no ticket, has the f fix hint", bottom)
 	}
 	h.Press("f")
 	if got := ran(t, dir); got != "" {

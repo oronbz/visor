@@ -228,7 +228,7 @@
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
         "values": {
-          "description": "What the item is, by name, such as {\"key\": \"GETT-123\", \"url\": \"https://…\"}. Never drawn: the user's custom Actions in config.toml fill their {{name}} templates with them, so name the values a script would want.",
+          "description": "What the item is, by name, such as {\"ticket\": \"GETT-123\", \"url\": \"https://…\"}. Never drawn: the user's custom Actions in config.toml fill their {{name}} templates with them, so name the values a script would want.",
           "type": "object",
           "additionalProperties": { "type": "string" }
         }

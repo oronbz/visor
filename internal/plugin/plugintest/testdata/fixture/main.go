@@ -258,7 +258,7 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 		}
 		f.reply(id, map[string]any{"payload": map[string]any{
 			"columns": []any{map[string]any{"flex": true}, map[string]any{"priority": 1, "right": true}},
-			"items":   []any{item("alpha", "alpha", map[string]string{"key": "FX-1; touch pwned"}), item("bravo", "bravo", nil)},
+			"items":   []any{item("alpha", "alpha", map[string]string{"ticket": "FX-1; touch pwned"}), item("bravo", "bravo", nil)},
 			"count":   2,
 			"actions": widgetActions,
 		}})
