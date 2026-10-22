@@ -120,7 +120,7 @@ type issueJSON struct {
 			Name           string
 			StatusCategory struct{ Key string }
 		}
-		Priority *struct{ Name string }
+		Issuetype *issueType
 	}
 }
 
@@ -132,7 +132,7 @@ func (w jira) Refresh(ctx context.Context, now time.Time) (widget.Payload, error
 	var issues []issueJSON
 	cursor := ""
 	for range maxPages {
-		q := url.Values{"jql": {w.jql}, "fields": {"summary,status,priority"}, "maxResults": {"100"}}
+		q := url.Values{"jql": {w.jql}, "fields": {"summary,status,issuetype"}, "maxResults": {"100"}}
 		if cursor != "" {
 			q.Set("nextPageToken", cursor)
 		}
@@ -170,7 +170,7 @@ func (w jira) payload(issues []issueJSON) widget.Payload {
 		p.Empty = "Nothing assigned to you."
 	}
 	for _, is := range issues {
-		glyph, tok := priority(is.Fields.Priority)
+		glyph, tok := kind(is.Fields.Issuetype)
 		p.Items = append(p.Items, widget.Item{
 			ID: is.Key,
 			Fields: []widget.Field{
@@ -188,18 +188,29 @@ func (w jira) payload(issues []issueJSON) widget.Payload {
 	return p
 }
 
-// priority is the glyph for an issue's priority, Cloud's names or Data Center's.
-func priority(p *struct{ Name string }) (string, theme.Token) {
-	if p == nil {
+type issueType struct {
+	Name    string
+	Subtask bool
+}
+
+// kind is the glyph for an issue's type, coloured as Jira colours it; a
+// site's own types, such as "Infra Task", go by the stock type they name.
+func kind(t *issueType) (string, theme.Token) {
+	if t == nil {
 		return "·", theme.Faint
 	}
-	switch strings.ToLower(p.Name) {
-	case "highest", "blocker", "critical", "high", "major":
-		return "▲", theme.Bad
-	case "medium":
-		return "■", theme.Warn
-	case "low", "minor", "lowest", "trivial":
-		return "▼", theme.Faint
+	name := strings.ToLower(t.Name)
+	switch {
+	case t.Subtask || strings.Contains(name, "sub-task") || strings.Contains(name, "subtask"):
+		return "↳", theme.Dim
+	case strings.Contains(name, "bug"):
+		return "●", theme.Bad
+	case strings.Contains(name, "epic"):
+		return "✦", theme.Info
+	case strings.Contains(name, "story"):
+		return "◆", theme.Ok
+	case strings.Contains(name, "task"):
+		return "✓", theme.Accent
 	}
 	return "·", theme.Faint
 }

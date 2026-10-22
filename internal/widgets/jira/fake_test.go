@@ -43,7 +43,8 @@ type issue struct {
 	key, summary, status string
 	// category is the status category key: new, indeterminate or done.
 	category string
-	priority string
+	// kind is the issue type's name; a "Sub-task" is flagged as one.
+	kind string
 	// transitions are offered by the issue; a trailing "!" on a name means
 	// the transition has a required field.
 	transitions []transition
@@ -122,14 +123,14 @@ func (j *fakeJira) search(w http.ResponseWriter, q url.Values) {
 	to := min(from+j.page, len(all))
 	var issues []any
 	for _, is := range all[from:to] {
-		var prio any
-		if is.priority != "" {
-			prio = map[string]any{"name": is.priority}
+		var kind any
+		if is.kind != "" {
+			kind = map[string]any{"name": is.kind, "subtask": is.kind == "Sub-task"}
 		}
 		issues = append(issues, map[string]any{"id": "1" + is.key, "key": is.key, "fields": map[string]any{
-			"summary":  is.summary,
-			"status":   map[string]any{"name": is.status, "statusCategory": map[string]any{"key": is.category}},
-			"priority": prio,
+			"summary":   is.summary,
+			"status":    map[string]any{"name": is.status, "statusCategory": map[string]any{"key": is.category}},
+			"issuetype": kind,
 		}})
 	}
 	page := map[string]any{"issues": issues, "isLast": to == len(all)}

@@ -26,10 +26,10 @@ func queue(t *testing.T) *fakeJira {
 	j := newJira(t)
 	j.page = 2
 	j.issues = []issue{
-		{key: "OPS-12", summary: "Rotate the TLS certificates", status: "In Progress", category: "indeterminate", priority: "Highest"},
-		{key: "OPS-9", summary: "Upgrade Postgres to 17", status: "To Do", category: "new", priority: "Medium"},
-		{key: "WEB-140", summary: "Dark mode for settings", status: "In Review", category: "indeterminate", priority: "High"},
-		{key: "WEB-133", summary: "Fix the flaky checkout test", status: "To Do", category: "new", priority: "Low"},
+		{key: "OPS-12", summary: "Rotate the TLS certificates", status: "In Progress", category: "indeterminate", kind: "Story"},
+		{key: "OPS-9", summary: "Upgrade Postgres to 17", status: "To Do", category: "new", kind: "Bug"},
+		{key: "WEB-140", summary: "Dark mode for settings", status: "In Review", category: "indeterminate", kind: "Epic"},
+		{key: "WEB-133", summary: "Fix the flaky checkout test", status: "To Do", category: "new", kind: "Sub-task"},
 		{key: "API-7", summary: "Document the rate limits", status: "Backlog", category: "new"},
 	}
 	return j
@@ -75,10 +75,10 @@ func TestJiraListsAssignedIssuesFollowingTheSearchCursor(t *testing.T) {
 		t.Errorf("top border %q, want the title with a count of 5", top)
 	}
 	want := []string{
-		"▲ OPS-12 Rotate the TLS certificates In Progress",
-		"■ OPS-9 Upgrade Postgres to 17 To Do",
-		"▲ WEB-140 Dark mode for settings In Review",
-		"▼ WEB-133 Fix the flaky checkout test To Do",
+		"◆ OPS-12 Rotate the TLS certificates In Progress",
+		"● OPS-9 Upgrade Postgres to 17 To Do",
+		"✦ WEB-140 Dark mode for settings In Review",
+		"↳ WEB-133 Fix the flaky checkout test To Do",
 		"· API-7 Document the rate limits Backlog",
 	}
 	if got := rows(h); strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -88,7 +88,7 @@ func TestJiraListsAssignedIssuesFollowingTheSearchCursor(t *testing.T) {
 	for _, c := range []struct {
 		text string
 		want theme.Token
-	}{{"In Progress", theme.Accent}, {"To Do", theme.Dim}, {"▲", theme.Bad}, {"■", theme.Warn}, {"▼", theme.Faint}} {
+	}{{"In Progress", theme.Accent}, {"To Do", theme.Dim}, {"◆", theme.Ok}, {"●", theme.Bad}, {"✦", theme.Info}, {"↳", theme.Dim}} {
 		x, y, ok := h.Find(c.text)
 		if !ok {
 			t.Errorf("%q not on screen", c.text)

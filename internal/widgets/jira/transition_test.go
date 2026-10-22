@@ -17,7 +17,7 @@ var spinner = regexp.MustCompile(`[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]`)
 // workflow is one issue with three transitions, the last needing a resolution.
 func workflow(t *testing.T) *fakeJira {
 	j := newJira(t)
-	j.issues = []issue{{key: "OPS-12", summary: "Rotate the TLS certificates", status: "To Do", category: "new", priority: "High",
+	j.issues = []issue{{key: "OPS-12", summary: "Rotate the TLS certificates", status: "To Do", category: "new", kind: "Task",
 		transitions: []transition{{"11", "Start progress", "In Progress"}, {"21", "Block", "Blocked"}, {"31", "Resolve!", "Done"}}}}
 	return j
 }
