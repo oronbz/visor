@@ -23,6 +23,15 @@ func Reference(types []widget.Type, loc Locale) string {
 			prose("%s", line)
 		}
 	}
+	fields := func(fs []widget.Setting, indent string) {
+		for _, f := range fs {
+			required := ""
+			if f.Required {
+				required = " Required."
+			}
+			prose("%s%-8s %s%s", indent, f.Name, f.Description, required)
+		}
+	}
 	setting := func(s widget.Setting) {
 		prose("%s", s.Description)
 		if s.Kind == widget.Secret {
@@ -33,13 +42,7 @@ func Reference(types []widget.Type, loc Locale) string {
 		if len(s.Choices) > 0 {
 			prose("One of: %s.", strings.Join(s.Choices, ", "))
 		}
-		for _, f := range s.Fields {
-			required := ""
-			if f.Required {
-				required = " Required."
-			}
-			prose("  %-8s %s%s", f.Name, f.Description, required)
-		}
+		fields(s.Fields, "  ")
 		prose("Why: %s", s.Why)
 		option("%s = %s", s.Name, widget.TOMLValue(s.Default))
 	}
@@ -93,6 +96,10 @@ func Reference(types []widget.Type, loc Locale) string {
 	prose(`  id       defaults to the type name; give each Widget of the same type its own`)
 	prose(`  title    drawn in the top border; defaults to the type's name`)
 	prose(`  refresh  how often it fetches, such as "5m"; defaults to the type's interval`)
+	prose(`  actions  your own Actions, on any Widget type:`)
+	wrapped(ActionsSetting.Description)
+	fields(ActionsSetting.Fields, "    ")
+	wrapped("Why: " + ActionsSetting.Why)
 	for _, t := range types {
 		b.WriteString("\n")
 		prose("%s Widget. %s", t.Title, t.Description)

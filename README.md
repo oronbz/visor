@@ -106,6 +106,16 @@ city = "Paris, Texas"
 units = "imperial"
 ```
 
+Any Widget, built-in or from a Plugin, takes your own Actions. Each runs a command, and `{{name}}` fills in a value of the selected Item, shell-quoted. Every Item has `{{id}}`, `{{title}}` and, when it opens a page, `{{url}}`. Script Items have each key they print, and Plugins may name more. Your key wins over the Widget's own:
+
+```toml
+[[widget]]
+type = "jira"
+actions = [
+  { key = "f", label = "fix bug", run = "~/bin/fix-bug {{url}}", confirm = true },
+]
+```
+
 To change colours, override any of the 13 colour tokens for dark or light backgrounds:
 
 ```toml

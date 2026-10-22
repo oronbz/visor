@@ -133,7 +133,7 @@ name = "mode"
 kind = "string"
 default = %q
 description = "What refreshes return"
-choices = ["items", "lines", "raw-colour", "malformed", "unknown-field", "setup", "error", "two-images", "bad-side", "image-file", "leak", "leak-status", "rejected", "unknown-secret", "own-secret"]
+choices = ["items", "lines", "raw-colour", "malformed", "unknown-field", "setup", "error", "two-images", "bad-side", "image-file", "leak", "leak-status", "rejected", "unknown-secret", "own-secret", "number-value"]
 
 [[widget.setting]]
 name = "token"

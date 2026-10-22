@@ -3,6 +3,8 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -11,8 +13,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/oronbz/visor/internal/config"
 	"github.com/oronbz/visor/internal/layout"
 	"github.com/oronbz/visor/internal/render"
+	"github.com/oronbz/visor/internal/shell"
 	"github.com/oronbz/visor/internal/theme"
 	"github.com/oronbz/visor/internal/widget"
 )
@@ -150,6 +154,8 @@ type bound struct {
 	// typ is what an addWidget Action places.
 	typ    string
 	choice *widget.Choice
+	// command is what a runCommand Action runs, its template filled.
+	command string
 }
 
 type hostAction int
@@ -163,11 +169,12 @@ const (
 	addWidget
 	saveSettings
 	installSkills
+	runCommand
 )
 
-// actions are Widget id's Actions as they apply now: the selected Item's,
-// then the Widget's, then the host-provided ones, which always include
-// setting each of its secrets.
+// actions are Widget id's Actions as they apply now: the user's own from
+// its block, the selected Item's, the Widget's, then the host-provided ones,
+// which always include setting each of its secrets.
 func (m Model) actions(id string) []bound {
 	r, ok := m.rects()[id]
 	if !ok {
@@ -191,14 +198,28 @@ func (m Model) actions(id string) []bound {
 		}
 	} else {
 		p := m.payloadIn(id, r)
+		var it *widget.Item
 		if st := m.lists[id]; st.idx < len(p.Items) {
-			it := p.Items[st.idx]
+			it = &p.Items[st.idx]
+		}
+		mine := custom(m.widgets[id].block.Actions, p, it)
+		out = append(out, mine...)
+		yieldTo := func(a widget.Action) widget.Action {
+			if slices.ContainsFunc(mine, func(c bound) bool { return c.Key != "" && c.Key == a.Key }) {
+				a.Key = ""
+			}
+			if slices.ContainsFunc(mine, func(c bound) bool { return c.Primary }) {
+				a.Primary = false
+			}
+			return a
+		}
+		if it != nil {
 			for _, a := range it.Actions {
-				out = append(out, bound{Action: a, item: it.ID, subject: subject(p, it)})
+				out = append(out, bound{Action: yieldTo(a), item: it.ID, subject: subject(p, *it)})
 			}
 		}
 		for _, a := range p.Actions {
-			out = append(out, bound{Action: a})
+			out = append(out, bound{Action: yieldTo(a)})
 		}
 	}
 	for _, s := range m.widgets[id].typ.Settings {
@@ -208,6 +229,44 @@ func (m Model) actions(id string) []bound {
 		}
 	}
 	return append(out, host...)
+}
+
+// custom are the block's own Actions that apply now: those naming values
+// of the selected Item it, filled from them, and those naming none.
+func custom(as []config.Action, p widget.Payload, it *widget.Item) []bound {
+	var out []bound
+	for i, c := range as {
+		a := bound{Action: widget.Action{ID: fmt.Sprintf("config:%d", i), Key: c.Key, Label: c.Label, Confirm: c.Confirm, Primary: c.Primary}, by: runCommand}
+		t := shell.Template(c.Run)
+		if t.PerItem() {
+			if it == nil {
+				continue
+			}
+			a.item, a.subject = it.ID, subject(p, *it)
+		}
+		var ok bool
+		if a.command, ok = t.Fill(values(p, it)); ok {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// values are what a custom Action's template can name of Item it: its id,
+// its title, the page it opens, and the values it names itself, which win.
+func values(p widget.Payload, it *widget.Item) map[string]string {
+	if it == nil {
+		return nil
+	}
+	v := map[string]string{"id": it.ID}
+	if t := subject(p, *it); t != "" {
+		v["title"] = t
+	}
+	if i := slices.IndexFunc(it.Actions, func(a widget.Action) bool { return a.Verb == widget.Open && a.Target != "" }); i >= 0 {
+		v["url"] = it.Actions[i].Target
+	}
+	maps.Copy(v, it.Values)
+	return v
 }
 
 // subject is the text of an Item's first flex Field, the name it goes by.
@@ -305,6 +364,15 @@ func (m Model) invoke(id string, a bound, text string) (Model, tea.Cmd) {
 		return m, m.editConfig(id, a)
 	case a.by == installSkills:
 		return m, m.installSkills()
+	case a.by == runCommand:
+		return m, func() tea.Msg {
+			out, err := shell.Run(context.Background(), a.command)
+			toast := shell.LastLine(out)
+			if toast == "" {
+				toast = a.Label + " done"
+			}
+			return actedMsg{id: id, item: a.item, action: a.Action, result: widget.Result{Toast: toast}, err: err}
+		}
 	case a.Verb == widget.Open:
 		opener, target := m.opts.Ports.Opener, a.Target
 		return m, func() tea.Msg {

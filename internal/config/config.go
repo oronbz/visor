@@ -43,6 +43,7 @@ type Widget struct {
 	Title string
 	// Refresh is zero when the block leaves it to the Widget type.
 	Refresh  time.Duration
+	Actions  []Action
 	Settings widget.Settings
 	// Setup, when set, is the needs-setup hint; the Widget isn't built.
 	Setup string
@@ -65,7 +66,31 @@ type Plugin struct {
 	Path string
 }
 
-var common = []string{"type", "id", "title", "refresh"}
+// Common are the keys every [[widget]] block takes, whatever its type.
+var Common = []string{"type", "id", "title", "refresh", "actions"}
+
+// Action is a custom Action from a block's `actions`: a command the host
+// runs itself, whatever the Widget type.
+type Action struct {
+	Run, Label, Key  string
+	Confirm, Primary bool
+}
+
+// ActionsSetting is the `actions` key every [[widget]] block takes.
+var ActionsSetting = widget.Setting{
+	Name: "actions", Kind: widget.Tables, Default: []widget.Settings{},
+	Description: "Each is a command template: {{name}} is the selected Item's value for name, " +
+		"shell-quoted; a template without one acts on the whole Widget. Every Item has {{id}}, {{title}} and, " +
+		"when it opens a page, {{url}}; script Items have each key they print, and Plugins may name more.",
+	Why: `Act on what any Widget lists, such as [{ key = "f", label = "fix bug", run = "~/bin/fix-bug {{key}}", confirm = true }].`,
+	Fields: []widget.Setting{
+		{Name: "run", Kind: widget.String, Default: "", Required: true, Description: "The command template, run by sh (cmd on Windows)."},
+		{Name: "label", Kind: widget.String, Default: "", Required: true, Description: "What the Action is called in hints and the palette."},
+		{Name: "key", Kind: widget.String, Default: "", Description: "Runs it while the Widget is focused, over the Widget's own key."},
+		{Name: "confirm", Kind: widget.Bool, Default: false, Description: "Ask before running it."},
+		{Name: "primary", Kind: widget.Bool, Default: false, Description: "Run it on enter."},
+	},
+}
 
 // Default is the config used with no config.toml: global defaults and one
 // Widget of every type but the opt-in ones, with the type name as its id.
@@ -250,6 +275,18 @@ func (p *parser) widget(i int, v any) (Widget, bool) {
 				continue
 			}
 			w.Refresh = d.(time.Duration)
+		case "actions":
+			tables, err := ActionsSetting.Check(v)
+			if err != nil {
+				setup = append(setup, p.problem(key, "`actions` in Widget `%s` %v", w.ID, err))
+				continue
+			}
+			for _, t := range tables.([]widget.Settings) {
+				w.Actions = append(w.Actions, Action{
+					Run: t.String("run"), Label: t.String("label"), Key: t.String("key"),
+					Confirm: t.Bool("confirm"), Primary: t.Bool("primary"),
+				})
+			}
 		default:
 			if ti < 0 {
 				continue

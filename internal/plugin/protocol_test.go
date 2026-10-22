@@ -106,6 +106,15 @@ func TestARawColourIsRejectedNamingIt(t *testing.T) {
 	}
 }
 
+func TestAnItemValueThatIsntTextIsRejected(t *testing.T) {
+	_, typ := fixture(t, plugintest.Options{})
+	w := open(t, typ, "fx", &clock{now: t0}, widget.Settings{"mode": "number-value"})
+	_, err := refresh(t, w)
+	if err == nil || !strings.Contains(err.Error(), "Plugin `fixture` sent a payload visor can't show") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestStatusesBecomeTheWidgetContractsErrors(t *testing.T) {
 	_, typ := fixture(t, plugintest.Options{})
 	c := &clock{now: t0}

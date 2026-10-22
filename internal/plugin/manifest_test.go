@@ -46,6 +46,7 @@ func TestBadManifestsAreProblemsNamingTheFile(t *testing.T) {
 		"bad refresh":       {goodManifest + "refresh = \"soon\"\n", "widget.0.refresh"},
 		"default mismatch":  {goodManifest + "[[widget.setting]]\nname = \"n\"\nkind = \"int\"\ndefault = \"three\"\ndescription = \"a number\"\n", "widget.0.setting.0.default"},
 		"reserved setting":  {goodManifest + "[[widget.setting]]\nname = \"title\"\nkind = \"string\"\ndefault = \"\"\ndescription = \"a title\"\n", "`title` is a key every Widget takes"},
+		"actions setting":   {goodManifest + "[[widget.setting]]\nname = \"actions\"\nkind = \"string\"\ndefault = \"\"\ndescription = \"some\"\n", "`actions` is a key every Widget takes"},
 		"bad choice":        {goodManifest + "[[widget.setting]]\nname = \"u\"\nkind = \"string\"\ndefault = \"kelvin\"\nchoices = [\"c\", \"f\"]\ndescription = \"units\"\n", "default must be one of"},
 		"not toml":          {"name = ", "line 1"},
 		"secret default":    {goodManifest + "[[widget.setting]]\nname = \"token\"\nkind = \"secret\"\ndefault = \"\"\ndescription = \"a token\"\n", "widget.0.setting.0: `default` isn't allowed with this `kind`"},

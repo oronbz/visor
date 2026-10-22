@@ -159,7 +159,8 @@ func New(o Options) Model {
 }
 
 // placeAll builds cfg's Widgets and returns their ids in config order, the
-// ids of those it built afresh, and toasts for refresh settings it clamped.
+// ids of those it built afresh, and toasts for refresh settings it clamped
+// and custom Action keys visor owns.
 // A Widget whose block, and the globals Widgets are built from, haven't
 // changed is kept as it was, state and all.
 func (m Model) placeAll(cfg config.Config) (Model, []string, []string, []string) {
@@ -168,8 +169,9 @@ func (m Model) placeAll(cfg config.Config) (Model, []string, []string, []string)
 	m.mouse = cfg.Mouse
 	m.widgetBase = widget.Config{TimeFormat: cfg.TimeFormat, WeekStart: cfg.WeekStart, DataDir: m.opts.Paths.Data, Ports: m.opts.Ports}
 	m.widgets = make(map[string]placed, len(cfg.Widgets))
-	var ids, fresh, clamped []string
+	var ids, fresh, problems []string
 	for _, wc := range cfg.Widgets {
+		problems = append(problems, m.shadowed(wc)...)
 		id, ref := wc.ID, config.Ref{ID: wc.ID}
 		// Widgets sharing an id are all in needs setup; suffixes keep them apart on screen only.
 		for n := 2; m.widgets[id].title != ""; n++ {
@@ -184,7 +186,7 @@ func (m Model) placeAll(cfg config.Config) (Model, []string, []string, []string)
 		m.widgets[id] = m.place(wc, ref)
 		fresh = append(fresh, id)
 		if problem := m.schedule(id, wc.Refresh); problem != "" {
-			clamped = append(clamped, problem)
+			problems = append(problems, problem)
 		}
 	}
 	for id := range m.sched {
@@ -193,7 +195,20 @@ func (m Model) placeAll(cfg config.Config) (Model, []string, []string, []string)
 		}
 	}
 	m.closeDropped(old)
-	return m, ids, fresh, clamped
+	return m, ids, fresh, problems
+}
+
+// shadowed are problems naming wc's custom Actions whose keys a host key
+// owns, which leaves them only in the palette.
+func (m Model) shadowed(wc config.Widget) []string {
+	var out []string
+	for _, a := range wc.Actions {
+		if a.Key != "" && hostKey(a.Key) {
+			out = append(out, fmt.Sprintf("%s:%d: key `%s` of `%s` in Widget `%s` is visor's own; pick another",
+				filepath.Base(m.configEditor.Path), wc.Line(), a.Key, a.Label, wc.ID))
+		}
+	}
+	return out
 }
 
 func (m Model) place(wc config.Widget, ref config.Ref) placed {

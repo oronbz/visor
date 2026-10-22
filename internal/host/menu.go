@@ -1,6 +1,7 @@
 package host
 
 import (
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -37,8 +38,8 @@ func (m Model) openMenu(id string, x, y int) Model {
 		return m
 	}
 	title := m.widgets[id].title
-	if as[0].item != "" && as[0].subject != "" {
-		title = as[0].subject
+	if i := slices.IndexFunc(as, func(a bound) bool { return a.item != "" && a.subject != "" }); i >= 0 {
+		title = as[i].subject
 	}
 	m.menu = &menu{widget: id, title: title, actions: as, x: x, y: y}
 	return m

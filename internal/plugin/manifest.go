@@ -11,6 +11,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/oronbz/visor/internal/config"
 	"github.com/oronbz/visor/internal/widget"
 )
 
@@ -60,9 +61,6 @@ type Setting struct {
 }
 
 var kinds = map[string]widget.Kind{"string": widget.String, "bool": widget.Bool, "int": widget.Int, "duration": widget.Duration, "secret": widget.Secret}
-
-// reserved are the keys every [[widget]] block takes, so no setting may use them.
-var reserved = []string{"type", "id", "title", "refresh"}
 
 func ReadManifest(dir string) (Manifest, error) {
 	file := filepath.Join(dir, ManifestFile)
@@ -162,7 +160,7 @@ func (w WidgetType) widgetType() (widget.Type, error) {
 		return t, fmt.Errorf("floor: %w", err)
 	}
 	for i, s := range w.Settings {
-		if slices.Contains(reserved, s.Name) {
+		if slices.Contains(config.Common, s.Name) {
 			return t, fmt.Errorf("setting.%d: `%s` is a key every Widget takes", i, s.Name)
 		}
 		if slices.ContainsFunc(t.Settings, func(o widget.Setting) bool { return o.Name == s.Name }) {

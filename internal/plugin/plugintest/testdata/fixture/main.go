@@ -200,6 +200,11 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"data": pixel, "path": "/tmp/pixel.png"}}})
 	case "bad-side":
 		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"data": pixel, "side": "under"}}})
+	case "number-value":
+		f.reply(id, map[string]any{"payload": map[string]any{
+			"columns": []any{map[string]any{"flex": true}},
+			"items":   []any{map[string]any{"id": "alpha", "fields": []any{[]any{map[string]any{"text": "alpha", "token": "fg"}}}, "values": map[string]any{"points": 3}}},
+		}})
 	case "raw-colour":
 		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("#ff0000", "red")}}})
 	case "unknown-field":
@@ -233,8 +238,8 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 	case "error":
 		f.reply(id, map[string]any{"status": map[string]any{"state": "error", "message": "upstream is down", "reason": "down", "hint": "try later"}})
 	default:
-		item := func(id, name string) map[string]any {
-			return map[string]any{
+		item := func(id, name string, values map[string]string) map[string]any {
+			it := map[string]any{
 				"id": id,
 				"fields": []any{
 					[]any{map[string]any{"text": greeting + " " + name + signedIn, "token": "fg"}},
@@ -246,10 +251,14 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 					map[string]any{"id": "move", "key": "c", "label": "move", "input": "choice", "prompt": "Move " + id},
 				},
 			}
+			if values != nil {
+				it["values"] = values
+			}
+			return it
 		}
 		f.reply(id, map[string]any{"payload": map[string]any{
 			"columns": []any{map[string]any{"flex": true}, map[string]any{"priority": 1, "right": true}},
-			"items":   []any{item("alpha", "alpha"), item("bravo", "bravo")},
+			"items":   []any{item("alpha", "alpha", map[string]string{"key": "FX-1; touch pwned"}), item("bravo", "bravo", nil)},
 			"count":   2,
 			"actions": widgetActions,
 		}})

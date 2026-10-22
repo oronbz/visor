@@ -226,7 +226,12 @@
         "id": { "description": "Stable across refreshes, so the selection follows the item.", "type": "string" },
         "group": { "description": "Consecutive items with the same group share a header.", "type": "string" },
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
-        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } }
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+        "values": {
+          "description": "What the item is, by name, such as {\"key\": \"GETT-123\", \"url\": \"https://…\"}. Never drawn: the user's custom Actions in config.toml fill their {{name}} templates with them, so name the values a script would want.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
       }
     },
     "rule": {
