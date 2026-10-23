@@ -2,7 +2,7 @@
 
 **A heads-up display for your terminal.**
 
-![visor: clock, calendar, meetings, tasks, reminders, notes, CPU and memory, GitHub review requests, Jira issues and the weather in one terminal dashboard](docs/screenshot.png)
+![visor: clock, calendar, meetings, tasks, reminders, notes, CPU, memory, disk and network, GitHub review requests, Jira issues and the weather in one terminal dashboard](docs/screenshot.png)
 
 Your next meeting, the PRs waiting for your review, your Jira tickets, today's tasks and reminders, and the weather on one screen. Act on them right there: approve a PR, move a ticket, check off a task, open a meeting.
 

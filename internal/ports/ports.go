@@ -93,10 +93,29 @@ type Machine interface {
 
 type Stats struct {
 	// CPU is the share of CPU time in use since the previous read, 0 to 1.
-	CPU               float64
+	CPU float64
+	// MemUsed never exceeds MemTotal.
 	MemUsed, MemTotal uint64
-	// Load is the 1, 5 and 15 minute load averages.
-	Load [3]float64
+	// Volumes are the startup disk, unless it can't be read, then each other
+	// volume mounted.
+	Volumes []Volume
+	// Interfaces are those traffic leaves by, Wi-Fi and Ethernet: not loopback,
+	// nor a VPN's or a container's, which would count the same bytes twice.
+	Interfaces []Interface
+}
+
+type Volume struct {
+	// Name is what Finder calls it; the startup disk's is empty.
+	Name    string
+	Startup bool
+	// Free never exceeds Total, which is never zero.
+	Total, Free uint64
+}
+
+// Interface is a network interface and the bytes it has moved since it came up.
+type Interface struct {
+	Name       string
+	Recv, Sent uint64
 }
 
 // Commands runs other CLIs visor borrows from, such as `gh auth token` and `herdr`.

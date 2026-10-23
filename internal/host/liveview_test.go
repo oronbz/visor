@@ -139,9 +139,9 @@ func TestCalendarMovesTodayAtMidnight(t *testing.T) {
 	}
 }
 
-func TestCPUDrawsBrailleHistoryMemoryBarAndLoad(t *testing.T) {
+func TestSystemDrawsCPUHistoryAndMemoryBarWithFreeOfTotal(t *testing.T) {
 	h := hosttest.New(t, hosttest.Options{Types: []widget.Type{cpu.Type}, Width: 40, Height: 10, Now: sundayAfternoon})
-	stats := ports.Stats{CPU: 0.5, MemUsed: 35 << 30, MemTotal: 100 << 30, Load: [3]float64{2.14, 1.96, 1.71}}
+	stats := ports.Stats{CPU: 0.5, MemUsed: 35 << 30, MemTotal: 100 << 30}
 	h.Machine.Set(stats)
 	h.Advance(2 * time.Second)
 	h.Advance(2 * time.Second)
@@ -164,19 +164,134 @@ func TestCPUDrawsBrailleHistoryMemoryBarAndLoad(t *testing.T) {
 		t.Errorf("chart drawn in %v, want accent", fg)
 	}
 
+	// Memory in binary units, the way RAM is sold: 65 GiB of 100 left.
 	want := map[int]string{
+		0: "╭─ System ─",
 		1: "│cpu 100%",
-		6: "│mem ██████████▌─────────────────── 35%│",
-		7: "│load 2.14 1.96 1.71",
+		6: "│mem ███████─────────────  35% 65G/100G│",
 	}
 	for y, w := range want {
 		if got := h.Line(y); !strings.HasPrefix(got, w) {
 			t.Errorf("line %d %q, want %q", y, got, w)
 		}
 	}
-	for x, tok := range map[int]theme.Token{5: theme.Info, 15: theme.Info, 16: theme.Line} {
+	for x, tok := range map[int]theme.Token{5: theme.Info, 11: theme.Info, 12: theme.Line} {
 		if got, _ := h.Fg(x, 6); got != tok {
 			t.Errorf("memory bar cell %d drawn in %v, want %v", x, got, tok)
+		}
+	}
+	if strings.Contains(h.Screen(), "load") {
+		t.Errorf("load averages still drawn:\n%s", h.Screen())
+	}
+}
+
+func TestSystemDrawsTheStartupDiskAsDiskWithFreeOfTotalInDecimalUnits(t *testing.T) {
+	h := hosttest.New(t, hosttest.Options{Types: []widget.Type{cpu.Type}, Width: 40, Height: 11, Now: sundayAfternoon})
+	h.Machine.Set(ports.Stats{MemUsed: 50 << 30, MemTotal: 100 << 30, Volumes: []ports.Volume{
+		{Startup: true, Total: 1e12, Free: 250e9},
+	}})
+	h.Advance(2 * time.Second)
+
+	// Labels and sizes line up, so the bars do too.
+	want := map[int]string{
+		6: "│mem  █████████─────────  50%  50G/100G│",
+		7: "│disk █████████████▌────  75% 250G/1.0T│",
+	}
+	for y, w := range want {
+		if got := h.Line(y); got != w {
+			t.Errorf("line %d %q, want %q\n%s", y, got, w, h.Screen())
+		}
+	}
+	if got, _ := h.Fg(6, 7); got != theme.Alt {
+		t.Errorf("disk bar drawn in %v, want alt", got)
+	}
+}
+
+func TestSystemListsEachMountedVolumeByNameColouredByHowFullItIs(t *testing.T) {
+	h := hosttest.New(t, hosttest.Options{Types: []widget.Type{cpu.Type}, Width: 40, Height: 14, Now: sundayAfternoon})
+	stats := ports.Stats{MemUsed: 50 << 30, MemTotal: 100 << 30, Volumes: []ports.Volume{
+		{Startup: true, Total: 1e12, Free: 500e9},
+		{Name: "Backup", Total: 2e12, Free: 300e9},
+		{Name: "Música", Total: 100e9, Free: 500e6},
+		{Name: "A Very Long Volume", Total: 64e9, Free: 9.4e9},
+	}}
+	h.Machine.Set(stats)
+	h.Advance(2 * time.Second)
+
+	// Labels pad by cells, not bytes, and a long name is cut to ten.
+	for i, r := range []struct {
+		label, size string
+		tok         theme.Token
+	}{
+		{"disk       ", "500G/1.0T", theme.Alt},  // 50% used
+		{"Backup     ", "300G/2.0T", theme.Warn}, // 85%
+		{"Música     ", "500M/100G", theme.Bad},  // 99.5%
+		{"A Very Lo… ", " 9.4G/64G", theme.Warn}, // 85%
+	} {
+		y := 7 + i
+		line := h.Line(y)
+		if got := cells(line, 1, 11); got != r.label {
+			t.Errorf("row %d label %q, want %q\n%s", i, got, r.label, h.Screen())
+		}
+		if !strings.HasSuffix(line, " "+r.size+"│") {
+			t.Errorf("row %d %q doesn't end with size %q", i, line, r.size)
+		}
+		if got, _ := h.Fg(12, y); got != r.tok {
+			t.Errorf("%s bar drawn in %v, want %v", r.label, got, r.tok)
+		}
+	}
+
+	// Without the startup disk, say when / can't be read, no volume poses as it.
+	stats.Volumes = stats.Volumes[1:2]
+	h.Machine.Set(stats)
+	h.Advance(2 * time.Second)
+	if got := cells(h.Line(10), 1, 7); got != "Backup " {
+		t.Errorf("row %q, want Backup by its name\n%s", h.Line(10), h.Screen())
+	}
+	if strings.Contains(h.Screen(), "disk") || strings.Contains(h.Screen(), "Música") {
+		t.Errorf("a volume that's gone is still drawn:\n%s", h.Screen())
+	}
+}
+
+func TestSystemDrawsDownloadAndUploadRatesSinceThePreviousRead(t *testing.T) {
+	h := hosttest.New(t, hosttest.Options{Types: []widget.Type{cpu.Type}, Width: 40, Height: 11, Now: sundayAfternoon})
+	stats := ports.Stats{MemUsed: 50 << 30, MemTotal: 100 << 30, Volumes: []ports.Volume{{Startup: true, Total: 1e12, Free: 500e9}}}
+	net := func() string { return strings.TrimRight(strings.Trim(h.Line(8), "│"), " ") }
+
+	// The read at start, before the fake has volumes, has nothing to compare with.
+	if got, want := net(), "net ↓ –  ↑ –"; got != want {
+		t.Errorf("first read %q, want %q\n%s", got, want, h.Screen())
+	}
+	en0 := func(recv, sent uint64) ports.Interface { return ports.Interface{Name: "en0", Recv: recv, Sent: sent} }
+	for _, step := range []struct {
+		name       string
+		interfaces []ports.Interface
+		want       string
+	}{
+		{"en0 first seen", []ports.Interface{en0(0, 0)}, "net  ↓ –  ↑ –"},
+		{"megabytes and kilobytes", []ports.Interface{en0(4.2e6, 280e3)}, "net  ↓ 2.1 MB/s  ↑ 140 KB/s"},
+		{"bytes", []ports.Interface{en0(4.2e6, 281e3)}, "net  ↓ 0 B/s  ↑ 500 B/s"},
+		// A USB Ethernet plugged in brings everything it moved since it came up.
+		{"gigabytes, en5 just plugged in", []ports.Interface{en0(3.0042e9, 281e3), {Name: "en5", Recv: 50e9, Sent: 50e9}},
+			"net  ↓ 1.5 GB/s  ↑ 0 B/s"},
+		// 999.5 KB/s rounds to 1000, which is shown as the next unit up.
+		{"both interfaces, rounding up a unit", []ports.Interface{en0(3.0061990e9, 281e3), {Name: "en5", Recv: 50e9, Sent: 50e9}},
+			"net  ↓ 1.0 MB/s  ↑ 0 B/s"},
+		{"read failed", nil, "net  ↓ –  ↑ –"},
+		{"en0 back", []ports.Interface{en0(3.0062e9, 281e3)}, "net  ↓ –  ↑ –"},
+		// Counters that went back, such as after the interface restarted, give no rate.
+		{"en0 counters went back", []ports.Interface{en0(1e6, 281e3)}, "net  ↓ –  ↑ –"},
+	} {
+		stats.Interfaces = step.interfaces
+		h.Machine.Set(stats)
+		h.Advance(2 * time.Second)
+		if got := net(); got != step.want {
+			t.Errorf("%s: %q, want %q", step.name, got, step.want)
+		}
+	}
+	for x, tok := range map[int]theme.Token{6: theme.Ok, 11: theme.Info} {
+		if got, _ := h.Fg(x, 8); got != tok {
+			t.Errorf("arrow at %d drawn in %v, want %v", x, got, tok)
 		}
 	}
 }
