@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	tokenPage = "https://github.com/settings/tokens/new?scopes=repo&description=visor"
+	tokenPage = "https://github.com/settings/tokens/new?scopes=repo,read:org&description=visor"
 	pasteHint = "Run `gh auth login`, or press Enter to paste a classic token"
 	classic   = "ghp_pAsTeDcLaSsIc0123456789abcdefABCDEF"
 )
@@ -124,7 +124,7 @@ func TestAFineGrainedTokenIsRefusedAndNotStored(t *testing.T) {
 	if got := stored(t, h); got != "" {
 		t.Fatalf("keyring holds %q, want nothing stored", got)
 	}
-	if footer := h.Line(11); !strings.Contains(footer, "Use a classic token with repo scope") {
+	if footer := h.Line(11); !strings.Contains(footer, "Use a classic token with repo and read:org scopes") {
 		t.Errorf("footer %q, want the classic-token message", footer)
 	}
 	if !strings.Contains(h.Screen(), pasteHint) {

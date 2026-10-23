@@ -365,18 +365,20 @@ func TestA403WithNoRequestsLeftPausesUntilTheRateLimitResets(t *testing.T) {
 	}
 }
 
-// tokenSources stages one GitHub token in each place PRs reads one from.
-// fix is what needs setup says to do about an unusable token there, and
-// paste whether it offers to paste one: only a pasted token can replace it.
-var tokenSources = []struct {
+// tokenSource stages a GitHub token in one place PRs reads one from. fix is
+// what needs setup says to do about an unusable token there, and paste
+// whether it offers to paste one: only a pasted token can replace it.
+type tokenSource struct {
 	name, fix string
 	paste     bool
 	o         func(tok string) hosttest.Options
-}{
-	{"GH_TOKEN", "Unset it or set a classic token with repo scope", false, func(tok string) hosttest.Options {
+}
+
+var tokenSources = []tokenSource{
+	{"GH_TOKEN", "Unset it or set a classic token with repo and read:org scopes", false, func(tok string) hosttest.Options {
 		return hosttest.Options{Env: map[string]string{"GH_TOKEN": tok}}
 	}},
-	{"GITHUB_TOKEN", "Unset it or set a classic token with repo scope", false, func(tok string) hosttest.Options {
+	{"GITHUB_TOKEN", "Unset it or set a classic token with repo and read:org scopes", false, func(tok string) hosttest.Options {
 		return hosttest.Options{Env: map[string]string{"GITHUB_TOKEN": tok}}
 	}},
 	{"`gh auth token`", "Run `gh auth login` again", false, func(tok string) hosttest.Options {
@@ -400,6 +402,25 @@ func offersPaste(h *hosttest.Host) bool {
 	return opened
 }
 
+// unusableFrom runs PRs with tok staged in src, and checks it needs setup
+// for problem, which is prefixed by src's name, with src's fix, and offers
+// to paste a token only where src does.
+func unusableFrom(t *testing.T, g *github, src tokenSource, tok, problem string) {
+	t.Helper()
+	o := src.o(tok)
+	o.Width, o.Height = 220, 12
+	h := withPRs(t, g, o)
+	screen := h.Screen()
+	for _, want := range []string{"needs setup", src.name + problem, src.fix} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("screen lacks %q:\n%s", want, screen)
+		}
+	}
+	if got := offersPaste(h); got != src.paste {
+		t.Errorf("enter opens the paste prompt: %v, want %v", got, src.paste)
+	}
+}
+
 func TestARejectedTokenNeedsSetupNamingItsSourceAndGitHubsMessage(t *testing.T) {
 	for _, src := range tokenSources {
 		t.Run(src.name, func(t *testing.T) {
@@ -407,18 +428,7 @@ func TestARejectedTokenNeedsSetupNamingItsSourceAndGitHubsMessage(t *testing.T) 
 			g.reply = func(request) (int, http.Header, string) {
 				return http.StatusUnauthorized, nil, `{"message": "Bad credentials"}`
 			}
-			o := src.o("ghp_expired")
-			o.Width, o.Height = 160, 12
-			h := withPRs(t, g, o)
-			screen := h.Screen()
-			for _, want := range []string{"needs setup", src.name + " was rejected by GitHub: Bad credentials", src.fix} {
-				if !strings.Contains(screen, want) {
-					t.Errorf("screen lacks %q:\n%s", want, screen)
-				}
-			}
-			if got := offersPaste(h); got != src.paste {
-				t.Errorf("enter opens the paste prompt: %v, want %v", got, src.paste)
-			}
+			unusableFrom(t, g, src, "ghp_expired", " was rejected by GitHub: Bad credentials")
 		})
 	}
 }
@@ -427,35 +437,22 @@ func TestAFineGrainedTokenNeedsSetupNamingItsSourceAndIsNeverSent(t *testing.T) 
 	for _, src := range tokenSources {
 		t.Run(src.name, func(t *testing.T) {
 			g := team(t)
-			o := src.o("github_pat_fake")
-			o.Width, o.Height = 160, 12
-			h := withPRs(t, g, o)
-			screen := h.Screen()
-			for _, want := range []string{"needs setup", src.name + " is a fine-grained token", src.fix} {
-				if !strings.Contains(screen, want) {
-					t.Errorf("screen lacks %q:\n%s", want, screen)
-				}
-			}
+			unusableFrom(t, g, src, "github_pat_fake", " is a fine-grained token")
 			if reqs := g.Requests(); len(reqs) != 0 {
 				t.Errorf("GitHub got %v", reqs)
-			}
-			if got := offersPaste(h); got != src.paste {
-				t.Errorf("enter opens the paste prompt: %v, want %v", got, src.paste)
 			}
 		})
 	}
 }
 
-func TestATokenMissingTheRepoScopeShowsAnError(t *testing.T) {
-	g := team(t)
-	g.reply = func(r request) (int, http.Header, string) {
-		return http.StatusOK, nil, `{"errors": [{"type": "INSUFFICIENT_SCOPES", "message": "Your token has not been granted the required scopes to execute this query."}]}`
-	}
-	h := withPRs(t, g, hosttest.Options{Width: 70, Height: 9})
-	screen := h.Screen()
-	for _, want := range []string{"not been granted the required scopes", "repo scope"} {
-		if !strings.Contains(screen, want) {
-			t.Errorf("screen lacks %q:\n%s", want, screen)
-		}
+func TestATokenMissingAScopeNeedsSetupNamingTheScopesAndGitHubsMessage(t *testing.T) {
+	for _, src := range tokenSources {
+		t.Run(src.name, func(t *testing.T) {
+			g := team(t)
+			g.reply = func(request) (int, http.Header, string) {
+				return http.StatusOK, nil, `{"errors": [{"type": "INSUFFICIENT_SCOPES", "message": "Your token has not been granted the required scopes to execute this query."}]}`
+			}
+			unusableFrom(t, g, src, "ghp_narrow", " needs repo and read:org scopes. GitHub: Your token has not been granted the required scopes")
+		})
 	}
 }

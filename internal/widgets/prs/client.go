@@ -155,4 +155,4 @@ type scopeError struct{ msg string }
 
 func (e scopeError) Error() string  { return "GitHub: " + e.msg }
 func (e scopeError) Reason() string { return "missing scope" }
-func (e scopeError) Hint() string   { return "Use a classic token with repo scope" }
+func (e scopeError) Hint() string   { return "Use a classic token with " + scopes }

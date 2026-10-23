@@ -17,7 +17,10 @@ const credential = "github:github.com"
 
 const service = "visor"
 
-const tokenPage = "https://github.com/settings/tokens/new?scopes=repo&description=visor"
+// scopes are what the search needs: read:org for a Team reviewer's slug.
+const scopes = "repo and read:org scopes"
+
+const tokenPage = "https://github.com/settings/tokens/new?scopes=repo,read:org&description=visor"
 
 const pasteToken = "paste-token"
 
@@ -79,9 +82,9 @@ func unusable(p ports.Ports, from, problem string) *widget.SetupError {
 	case from == github.FromGh:
 		return &widget.SetupError{Hint: problem + ". Run `gh auth login` again"}
 	case from != fromKeyring:
-		return &widget.SetupError{Hint: problem + ". Unset it or set a classic token with repo scope"}
+		return &widget.SetupError{Hint: problem + ". Unset it or set a classic token with " + scopes}
 	case !canStore(p):
-		return &widget.SetupError{Hint: problem + ". Set GH_TOKEN to a classic token with repo scope"}
+		return &widget.SetupError{Hint: problem + ". Set GH_TOKEN to a classic token with " + scopes}
 	}
 	return &widget.SetupError{
 		Hint:   problem + ". Run `gh auth login`, or press Enter to paste a classic token",
@@ -93,6 +96,10 @@ func rejected(p ports.Ports, from string, err authError) *widget.SetupError {
 	return unusable(p, from, from+" was rejected by GitHub: "+err.msg)
 }
 
+func lacking(p ports.Ports, from string, err scopeError) *widget.SetupError {
+	return unusable(p, from, from+" needs "+scopes+". GitHub: "+strings.TrimSuffix(err.msg, "."))
+}
+
 func refused(p ports.Ports, from string) *widget.SetupError {
 	return unusable(p, from, from+" is a fine-grained token, which can't search other organizations' PRs")
 }
@@ -100,7 +107,7 @@ func refused(p ports.Ports, from string) *widget.SetupError {
 func pasteAction() *widget.Action {
 	return &widget.Action{
 		ID: pasteToken, Label: "paste token", Input: widget.SecretInput,
-		Prompt: "Paste a classic token with repo scope", Target: tokenPage,
+		Prompt: "Paste a classic token with " + scopes, Target: tokenPage,
 	}
 }
 
@@ -110,7 +117,7 @@ func store(p ports.Ports, text string) (widget.Result, error) {
 	case tok == "":
 		return widget.Result{}, errors.New("no token pasted")
 	case fineGrained(tok):
-		return widget.Result{}, errors.New("Use a classic token with repo scope")
+		return widget.Result{}, errors.New("Use a classic token with " + scopes)
 	case p.Keyring == nil:
 		return widget.Result{}, errors.New("no keyring to keep the token in; set GH_TOKEN instead")
 	}

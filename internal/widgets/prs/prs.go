@@ -161,6 +161,9 @@ func (w prs) Refresh(ctx context.Context, now time.Time) (widget.Payload, error)
 	if auth := (authError{}); errors.As(err, &auth) {
 		return widget.Payload{}, rejected(w.ports, c.from, auth)
 	}
+	if scope := (scopeError{}); errors.As(err, &scope) {
+		return widget.Payload{}, lacking(w.ports, c.from, scope)
+	}
 	if err != nil {
 		return widget.Payload{}, err
 	}
