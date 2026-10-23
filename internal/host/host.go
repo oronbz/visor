@@ -1,6 +1,7 @@
 // Package host is the visor Bubble Tea program: it owns the Widgets, input
 // modes and focus, and draws the dashboard. Everything outside the process
-// goes through Options.Ports.
+// goes through Options.Ports. Host keys are bound in focus.go, where hostKey
+// says which keys shadow a Widget's Actions.
 package host
 
 import (

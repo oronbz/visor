@@ -10,6 +10,10 @@
 
 **Secret setting**: A Widget type's setting that holds a credential, such as an API token. visor asks for it in a masked prompt through the Widget's "Set <name>" Action and keeps it in the OS keyring, never in config.toml. It belongs to the Plugin, not to one Widget, so every Widget of the Plugin shares it, and uninstalling the Plugin deletes it. A Plugin never stores a credential itself.
 
+**Payload**: Everything a Widget gives visor to draw at one moment: either a live view's lines, or a list Widget's Items under its columns with an optional Summary. Either kind may carry Widget Actions. A Plugin sends one in reply to each refresh.
+
+**Image**: A PNG or JPEG a live view shows inside its Payload, kept at its aspect ratio. visor draws it with the terminal's own graphics where it can, and in half blocks where it can't.
+
 **Item**: A single row in a list Widget, such as a pull request, a ticket, a reminder or a meeting.
 
 **Summary**: Lines a list Widget pins above its Items, such as headline numbers, a chart or a bar, so one Widget can show both. They stay put while the Items scroll. It isn't called a header because Group headers already exist.

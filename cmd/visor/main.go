@@ -1,3 +1,5 @@
+// Command visor is the terminal dashboard; everything it does runs through
+// cli.Run.
 package main
 
 import (
