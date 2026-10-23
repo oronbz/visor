@@ -64,20 +64,22 @@ func (m Model) checksUpgrades() bool {
 	return release && m.getenv("VISOR_NO_UPGRADE_CHECK") == ""
 }
 
+// checking is whether visor looks for newer releases at all.
+func (m Model) checking() bool { return m.upgrades.on && m.checksUpgrades() }
+
 // newer is the release an Upgrade would move to, while one is known.
 func (m Model) newer() (upgrade.Release, bool) {
-	u := m.upgrades
-	if !u.on || !m.checksUpgrades() || !u.known.Newer(m.version()) {
+	if !m.checking() || !m.upgrades.known.Newer(m.version()) {
 		return upgrade.Release{}, false
 	}
-	return u.known.Latest, true
+	return m.upgrades.known.Latest, true
 }
 
 // upgradeDue waits until the last check, whichever instance made it, is
 // Interval old. Checks run as one timer chain, from Init or from turning
 // upgrade_check on.
 func (m Model) upgradeDue() tea.Cmd {
-	if !m.checksUpgrades() || !m.upgrades.on {
+	if !m.checking() {
 		return nil
 	}
 	due := upgradeDueMsg{m.upgrades.chain}
@@ -92,13 +94,18 @@ func (m Model) checkUpgrade(msg upgradeDueMsg) tea.Cmd {
 	if msg.chain != m.upgrades.chain || !m.upgrades.on {
 		return nil
 	}
+	return m.check(false, func(st upgrade.State, _ error) tea.Msg {
+		// A failed check waits for the next one, as quietly as visor started.
+		return upgradeCheckedMsg{st, msg.chain}
+	})
+}
+
+// check asks GitHub, unless an instance did within upgrade.Interval and not
+// force, and hands the outcome to done.
+func (m Model) check(force bool, done func(upgrade.State, error) tea.Msg) tea.Cmd {
 	c := upgrade.For(m.opts.Paths.Cache, m.opts.Ports)
 	now := m.opts.Ports.Clock.Now()
-	return func() tea.Msg {
-		// A failed check waits for the next one, as quietly as visor started.
-		st, _ := c.Check(now, false)
-		return upgradeCheckedMsg{st, msg.chain}
-	}
+	return func() tea.Msg { return done(c.Check(now, force)) }
 }
 
 func (m Model) upgradeChecked(msg upgradeCheckedMsg) (Model, tea.Cmd) {
@@ -107,6 +114,41 @@ func (m Model) upgradeChecked(msg upgradeCheckedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, m.upgradeDue()
+}
+
+// upgradeCheckedNowMsg is the outcome of a check the user asked for.
+type upgradeCheckedNowMsg struct {
+	state upgrade.State
+	err   error
+}
+
+// checkAction asks GitHub at once, however recent the last check, while
+// checks are on and no newer release is known yet.
+func (m Model) checkAction() (bound, bool) {
+	if _, ok := m.newer(); ok || !m.checking() {
+		return bound{}, false
+	}
+	return bound{Action: widget.Action{ID: "check-upgrade", Label: "check for a visor upgrade"}, by: checkForUpgrade}, true
+}
+
+func (m Model) checkUpgradeNow() tea.Cmd {
+	return m.check(true, func(st upgrade.State, err error) tea.Msg { return upgradeCheckedNowMsg{st, err} })
+}
+
+// upgradeCheckedNow reports the check, unless checks were turned off while it
+// ran. A release found but not saved is still offered.
+func (m Model) upgradeCheckedNow(msg upgradeCheckedNowMsg) (Model, tea.Cmd) {
+	if !m.checking() {
+		return m, nil
+	}
+	m = m.adoptUpgrade(msg.state)
+	if _, found := m.newer(); found {
+		return m, nil
+	}
+	if msg.err != nil {
+		return m.say("Checking for a visor upgrade failed: "+msg.err.Error(), theme.Bad)
+	}
+	return m.say("visor v"+m.version()+" is the latest", theme.Ok)
 }
 
 // adoptUpgrade takes st, read from disk, as what's known. It keeps a

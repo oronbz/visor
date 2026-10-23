@@ -29,6 +29,8 @@ type releases struct {
 	mu       sync.Mutex
 	tag      string
 	requests int
+	// down, when set, is the status GitHub answers with instead.
+	down int
 }
 
 const notes = "## Changelog\n* 1a2b3c4 Jira: an issue's glyph is its type\n* 5d6e7f8 PRs: a token missing scopes asks for setup\n* 9a8b7c6 Third\n* 1b2c3d4 Fourth\n* 5e6f7a8 Fifth\n* 9b8c7d6 Sixth, never shown\n"
@@ -45,6 +47,10 @@ func newReleases(t *testing.T, tag string) *releases {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.requests++
+		if r.down != 0 {
+			w.WriteHeader(r.down)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"tag_name": r.tag, "body": notes, "html_url": "https://github.com/oronbz/visor/releases/tag/" + r.tag,
 		})
@@ -57,6 +63,12 @@ func (r *releases) publish(tag string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.tag = tag
+}
+
+func (r *releases) fail(status int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.down = status
 }
 
 func (r *releases) count() int {
@@ -467,5 +479,90 @@ func TestKeysReachVisorWhileItsTooSmallToDrawThePopup(t *testing.T) {
 	h.Press("q")
 	if !h.Quit() {
 		t.Errorf("q while the popup can't be drawn didn't quit:\n%s", h.Screen())
+	}
+}
+
+func TestCheckingFromThePaletteAsksGitHubNowAndSaysWhenVisorIsTheLatest(t *testing.T) {
+	gh := newReleases(t, "v0.6.2")
+	h := running(t, gh, hosttest.Options{})
+
+	runFromPalette(t, h, "check for a visor upgrade")
+	if gh.count() != 2 {
+		t.Errorf("asked GitHub %d times, want the launch check and this one, though 12h haven't passed", gh.count())
+	}
+	if !strings.Contains(h.Screen(), "visor v0.6.2 is the latest") {
+		t.Errorf("no toast that visor is the latest:\n%s", h.Screen())
+	}
+}
+
+func TestCheckingFromThePaletteOffersANewerReleaseLikeTheLaunchCheck(t *testing.T) {
+	gh := newReleases(t, "v0.6.2")
+	h := running(t, gh, hosttest.Options{})
+	gh.publish("v0.7.0")
+
+	runFromPalette(t, h, "check for a visor upgrade")
+	if !popupOpen(h) || strings.Contains(h.Screen(), "is the latest") {
+		t.Errorf("a newer release found by hand doesn't open the popup alone:\n%s", h.Screen())
+	}
+}
+
+func TestAFailedCheckFromThePaletteToastsItsError(t *testing.T) {
+	gh := newReleases(t, "v0.6.2")
+	h := running(t, gh, hosttest.Options{})
+	gh.fail(http.StatusBadGateway)
+
+	runFromPalette(t, h, "check for a visor upgrade")
+	if want := "Checking for a visor upgrade failed: checking for a new release: GitHub answered 502"; !strings.Contains(h.Screen(), want) {
+		t.Errorf("no toast %q:\n%s", want, h.Screen())
+	}
+}
+
+func TestThePaletteOffersACheckOnlyWhileChecksAreOnAndNothingNewerIsKnown(t *testing.T) {
+	has := func(h *hosttest.Host) bool {
+		h.Press("ctrl+k")
+		defer h.Press("esc")
+		return slices.ContainsFunc(paletteEntries(h), func(e string) bool { return strings.Contains(e, "check for a visor upgrade") })
+	}
+	cases := []struct {
+		name, tag string
+		o         hosttest.Options
+		want      bool
+	}{
+		{"checks on, up to date", "v0.6.2", hosttest.Options{}, true},
+		{"a newer release known", "v0.7.0", hosttest.Options{}, false},
+		{"upgrade_check = false", "v0.6.2", hosttest.Options{Config: "upgrade_check = false\n"}, false},
+		{"VISOR_NO_UPGRADE_CHECK", "v0.6.2", hosttest.Options{Env: map[string]string{"VISOR_NO_UPGRADE_CHECK": "1"}}, false},
+		{"a dev build", "v0.6.2", hosttest.Options{Version: "dev"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.o.Version == "" {
+				c.o.Version = "0.6.2"
+			}
+			h := runningAs(t, newReleases(t, c.tag), c.o)
+			if popupOpen(h) {
+				h.Press("esc")
+			}
+			if got := has(h); got != c.want {
+				t.Errorf("palette offers the check %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestANewerReleaseFoundByHandOpensThePopupThoughItCantBeSaved(t *testing.T) {
+	gh := newReleases(t, "v0.6.2")
+	o := hosttest.Options{}
+	cache := hosttestPaths(t, &o).Cache
+	h := running(t, gh, o)
+	gh.publish("v0.7.0")
+	if err := os.Chmod(cache, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(cache, 0o700) })
+
+	runFromPalette(t, h, "check for a visor upgrade")
+	if !popupOpen(h) || strings.Contains(h.Screen(), "failed") {
+		t.Errorf("want the popup and no failure toast for a release found but not saved:\n%s", h.Screen())
 	}
 }

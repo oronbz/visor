@@ -301,6 +301,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.checkUpgrade(msg)
 	case upgradeCheckedMsg:
 		return m.upgradeChecked(msg)
+	case upgradeCheckedNowMsg:
+		return m.upgradeCheckedNow(msg)
 	case upgradedMsg:
 		return m.upgraded(msg)
 	case toastExpiredMsg:

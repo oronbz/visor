@@ -71,7 +71,7 @@ visor checks GitHub for a new release every 12 hours. When one is out, it shows 
 - A deb, rpm or apk package, or `go install`: visor copies the command to run.
 - Anything else: visor opens the release page.
 
-`visor upgrade` checks right away and does the same from the shell. To turn the check off, set `upgrade_check = false` in config.toml or `VISOR_NO_UPGRADE_CHECK=1`; `visor upgrade` still works.
+*check for a visor upgrade* in the palette checks right away; `visor upgrade` does too, then upgrades from the shell. To turn the check off, set `upgrade_check = false` in config.toml or `VISOR_NO_UPGRADE_CHECK=1`; `visor upgrade` still works.
 
 ## Getting started
 

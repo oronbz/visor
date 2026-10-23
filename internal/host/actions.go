@@ -171,6 +171,7 @@ const (
 	installSkills
 	runCommand
 	upgradeVisor
+	checkForUpgrade
 )
 
 // actions are Widget id's Actions as they apply now: the user's own from
@@ -364,6 +365,8 @@ func (m Model) invoke(id string, a bound, text string) (Model, tea.Cmd) {
 		return m, m.installSkills()
 	case a.by == upgradeVisor:
 		return m.startUpgrade()
+	case a.by == checkForUpgrade:
+		return m, m.checkUpgradeNow()
 	case a.by == runCommand:
 		return m, func() tea.Msg {
 			out, err := shell.Run(context.Background(), a.command)

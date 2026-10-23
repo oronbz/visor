@@ -40,6 +40,9 @@ func (m Model) entries() []entry {
 	if a, ok := m.upgradeAction(); ok {
 		all = append(all, entry{title: dashboard, action: a})
 	}
+	if a, ok := m.checkAction(); ok {
+		all = append(all, entry{title: dashboard, action: a})
+	}
 	q := strings.TrimSpace(string(m.palette.query))
 	if q == "" {
 		return all
