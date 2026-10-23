@@ -25,3 +25,5 @@
 **Stack**: A cell of the Layout that holds its own rows instead of a single Widget, so Widgets can sit one above the other beside a taller neighbour. This is what makes a full-height column possible: one Widget in its cell, the rest stacked beside it.
 
 **Status**: How current and healthy a Widget's data is: *loading* (nothing to show yet), *ok*, *stale* (the data shown is old or its last refresh failed), *error* (nothing to show because fetching failed), or *needs setup* (missing access or settings, with a way to fix it).
+
+**Upgrade**: Moving visor itself to a newer release. Plugins are updated, not upgraded, and a Widget's data is refreshed.
