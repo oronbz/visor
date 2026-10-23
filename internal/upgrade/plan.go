@@ -32,14 +32,9 @@ type Plan struct {
 	Page string
 }
 
-// Argv splits Command into a program and its arguments, for Brew, whose
-// command has no quoting.
+// Argv runs Command through sh, which Brew's two steps need.
 func (p Plan) Argv() (string, []string) {
-	f := strings.Fields(p.Command)
-	if len(f) == 0 {
-		return "", nil
-	}
-	return f[0], f[1:]
+	return "sh", []string{"-c", p.Command}
 }
 
 // Plan is the Upgrade to r for this Install. A Package with no package
@@ -48,7 +43,9 @@ func (in Install) Plan(r Release) Plan {
 	p := Plan{Method: in.Method, Page: r.Page()}
 	switch in.Method {
 	case Brew:
-		p.Command = "brew upgrade --cask visor"
+		// brew refreshes a tap on its own only a day after the last update, so
+		// without its own update a release out since then reads as installed.
+		p.Command = "brew update && brew upgrade --cask visor"
 	case GoInstall:
 		p.Command = "go install github.com/oronbz/visor/cmd/visor@latest github.com/oronbz/visor/cmd/visor-weather@latest"
 	case Package:

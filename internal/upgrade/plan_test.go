@@ -15,7 +15,9 @@ func TestEachInstallGetsTheUpgradeItsInstallerOffers(t *testing.T) {
 		method  upgrade.Method
 		command string
 	}{
-		{"brew", upgrade.Install{Method: upgrade.Brew}, upgrade.Brew, "brew upgrade --cask visor"},
+		// The tap first: brew refreshes it on its own only a day after the last
+		// update, so a release out since then reads as already installed.
+		{"brew", upgrade.Install{Method: upgrade.Brew}, upgrade.Brew, "brew update && brew upgrade --cask visor"},
 		{"go install", upgrade.Install{Method: upgrade.GoInstall}, upgrade.GoInstall,
 			"go install github.com/oronbz/visor/cmd/visor@latest github.com/oronbz/visor/cmd/visor-weather@latest"},
 		{"deb on amd64", upgrade.Install{Method: upgrade.Package, Manager: "dpkg", Arch: "amd64"}, upgrade.Package,

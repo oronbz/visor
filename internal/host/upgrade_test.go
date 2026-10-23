@@ -289,7 +289,7 @@ func caskInstall(t *testing.T) string {
 	return launched
 }
 
-var brewUpgrade = []string{"brew", "upgrade", "--cask", "visor"}
+var brewUpgrade = []string{"sh", "-c", "brew update && brew upgrade --cask visor"}
 
 func ranBrew(h *hosttest.Host) bool {
 	return slices.ContainsFunc(h.Foreground.Ran(), func(c []string) bool { return slices.Equal(c, brewUpgrade) })
@@ -298,13 +298,13 @@ func ranBrew(h *hosttest.Host) bool {
 func TestEnterInThePopupRunsBrewAndRestartsThroughTheLaunchPath(t *testing.T) {
 	exe := caskInstall(t)
 	h := running(t, newReleases(t, "v0.7.0"), hosttest.Options{Executable: exe})
-	if !strings.Contains(h.Screen(), "⏎ runs `brew upgrade --cask visor`") || !strings.Contains(h.Screen(), "⏎ upgrade") {
+	if !strings.Contains(h.Screen(), "⏎ runs `brew update && brew upgrade --cask visor`") || !strings.Contains(h.Screen(), "⏎ upgrade") {
 		t.Fatalf("popup for a cask install doesn't name brew:\n%s", h.Screen())
 	}
 
 	h.Press("enter")
 	if !ranBrew(h) {
-		t.Fatalf("ran %v, want brew upgrade --cask visor", h.Foreground.Ran())
+		t.Fatalf("ran %v, want brew update && brew upgrade --cask visor", h.Foreground.Ran())
 	}
 	if !h.Quit() || h.Restart() != exe {
 		t.Errorf("after brew, quit %v and restart %q, want visor run again through %q", h.Quit(), h.Restart(), exe)
@@ -329,7 +329,7 @@ func TestEveryOtherWayToUpgradeAsksFirstWithTheExactCommand(t *testing.T) {
 
 			start(h)
 			screen := h.Screen()
-			if !strings.Contains(screen, "Upgrade visor (v0.6.2 → v0.7.0)?") || !strings.Contains(screen, "brew upgrade --cask visor") {
+			if !strings.Contains(screen, "Upgrade visor (v0.6.2 → v0.7.0)?") || !strings.Contains(screen, "brew update && brew upgrade --cask visor") {
 				t.Fatalf("no confirm naming the command:\n%s", screen)
 			}
 			if ranBrew(h) {

@@ -64,8 +64,8 @@ func TestUpgradeRunsBrewForACaskInstall(t *testing.T) {
 	if code := run(t, s); code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr)
 	}
-	if !slices.EqualFunc(fg.Ran(), [][]string{{"brew", "upgrade", "--cask", "visor"}}, slices.Equal) {
-		t.Errorf("ran %v, want brew upgrade --cask visor", fg.Ran())
+	if !slices.EqualFunc(fg.Ran(), [][]string{{"sh", "-c", "brew update && brew upgrade --cask visor"}}, slices.Equal) {
+		t.Errorf("ran %v, want brew update && brew upgrade --cask visor", fg.Ran())
 	}
 	if got := stdout.String(); !strings.Contains(got, "==> Upgrading visor") {
 		t.Errorf("stdout %q, want brew's output", got)
