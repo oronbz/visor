@@ -65,7 +65,13 @@ go install github.com/oronbz/visor/cmd/visor-weather@latest
 
 ### Update
 
-`brew update && brew upgrade visor`, or install the new release the way you installed the first.
+visor checks GitHub for a new release every 12 hours. When one is out, it shows a popup once with what's new, and an `↑ vX.Y.Z` pill stays at the right of the footer. `⏎` in the popup, `U`, a click on the pill or *upgrade visor* in the `ctrl+k` palette starts the Upgrade, which depends on how visor was installed:
+
+- Homebrew: visor runs `brew upgrade --cask visor` and comes back as the new version.
+- A deb, rpm or apk package, or `go install`: visor copies the command to run.
+- Anything else: visor opens the release page.
+
+`visor upgrade` checks right away and does the same from the shell. To turn the check off, set `upgrade_check = false` in config.toml or `VISOR_NO_UPGRADE_CHECK=1`; `visor upgrade` still works.
 
 ## Getting started
 

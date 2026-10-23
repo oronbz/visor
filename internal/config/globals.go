@@ -45,6 +45,11 @@ func Globals(loc Locale) []widget.Setting {
 			Description: "Capture the mouse for clicks, drags and the wheel.",
 			Why:         "Turn it off to get the terminal's own text selection back.",
 		},
+		{
+			Name: "upgrade_check", Kind: widget.Bool, Default: true,
+			Description: "Check for a new visor release every 12 hours. When one is out, visor shows a popup once and an ↑ vX.Y.Z pill in the footer; ⏎ in the popup, U, a click on the pill or the palette's \"upgrade visor\" starts the Upgrade, which runs brew for a Homebrew install and otherwise copies the command or opens the release page. `visor upgrade` checks right away. VISOR_NO_UPGRADE_CHECK=1 turns it off too.",
+			Why:         "Turn it off to keep visor from asking GitHub for releases; `visor upgrade` still works.",
+		},
 	}
 }
 

@@ -56,6 +56,8 @@ type Options struct {
 	Env map[string]string
 	// Version is the visor version the app runs as (see host.Options.Version).
 	Version string
+	// Executable is the path visor was launched by (see host.Options.Executable).
+	Executable string
 	// BundleDir stands in for the directory visor is installed in, where it
 	// finds the Plugins it ships with; empty ships none.
 	BundleDir string
@@ -68,16 +70,17 @@ type Host struct {
 	Root  string
 	Paths paths.Paths
 
-	Clock     *Clock
-	Opener    *Opener
-	Clipboard *Clipboard
-	Editor    *Editor
-	Keyring   *Keyring
-	Commands  *Commands
-	EventKit  *EventKit
-	Machine   *Machine
-	Watcher   *Watcher
-	Inbox     *Inbox
+	Clock      *Clock
+	Opener     *Opener
+	Clipboard  *Clipboard
+	Editor     *Editor
+	Keyring    *Keyring
+	Commands   *Commands
+	Foreground *Foreground
+	EventKit   *EventKit
+	Machine    *Machine
+	Watcher    *Watcher
+	Inbox      *Inbox
 
 	model  tea.Model
 	w, h   int
@@ -114,19 +117,20 @@ func New(t testing.TB, o Options) *Host {
 		th = *o.Theme
 	}
 	h := &Host{
-		t:         t,
-		Root:      o.Root,
-		Paths:     paths.Under(o.Root),
-		Clock:     newClock(o.Now),
-		Opener:    &Opener{},
-		Clipboard: &Clipboard{},
-		Editor:    &Editor{},
-		Keyring:   o.Keyring,
-		Commands:  o.Commands,
-		EventKit:  o.EventKit,
-		Machine:   &Machine{},
-		Watcher:   &Watcher{},
-		Inbox:     &Inbox{},
+		t:          t,
+		Root:       o.Root,
+		Paths:      paths.Under(o.Root),
+		Clock:      newClock(o.Now),
+		Opener:     &Opener{},
+		Clipboard:  &Clipboard{},
+		Editor:     &Editor{},
+		Keyring:    o.Keyring,
+		Commands:   o.Commands,
+		Foreground: &Foreground{},
+		EventKit:   o.EventKit,
+		Machine:    &Machine{},
+		Watcher:    &Watcher{},
+		Inbox:      &Inbox{},
 	}
 	if o.Config != "" {
 		if err := os.MkdirAll(h.Paths.Config, 0o755); err != nil {
@@ -145,26 +149,28 @@ func New(t testing.TB, o Options) *Host {
 		closeKeys = append(closeKeys, seq)
 	}
 	m := host.New(host.Options{
-		CloseKeys: closeKeys,
-		Paths:     h.Paths,
-		Theme:     th,
-		Types:     o.Types,
-		Version:   o.Version,
-		BundleDir: o.BundleDir,
+		CloseKeys:  closeKeys,
+		Paths:      h.Paths,
+		Theme:      th,
+		Types:      o.Types,
+		Version:    o.Version,
+		BundleDir:  o.BundleDir,
+		Executable: o.Executable,
 		Ports: ports.Ports{
-			Clock:     h.Clock,
-			Opener:    h.Opener,
-			Clipboard: h.Clipboard,
-			Editor:    h.Editor,
-			Keyring:   h.Keyring,
-			Commands:  h.Commands,
-			EventKit:  h.EventKit,
-			Machine:   h.Machine,
-			Watcher:   h.Watcher,
-			Inbox:     h.Inbox,
-			HTTP:      &http.Client{Timeout: 5 * time.Second},
-			Endpoints: mergeEndpoints(ports.DefaultEndpoints(), o.Endpoints),
-			Getenv:    func(k string) string { return o.Env[k] },
+			Clock:      h.Clock,
+			Opener:     h.Opener,
+			Clipboard:  h.Clipboard,
+			Editor:     h.Editor,
+			Keyring:    h.Keyring,
+			Commands:   h.Commands,
+			Foreground: h.Foreground,
+			EventKit:   h.EventKit,
+			Machine:    h.Machine,
+			Watcher:    h.Watcher,
+			Inbox:      h.Inbox,
+			HTTP:       &http.Client{Timeout: 5 * time.Second},
+			Endpoints:  mergeEndpoints(ports.DefaultEndpoints(), o.Endpoints),
+			Getenv:     func(k string) string { return o.Env[k] },
 		},
 	})
 	h.model = m
@@ -288,6 +294,9 @@ func (h *Host) ReceiveUntil(done func() bool) {
 
 // Quit reports whether the app has asked Bubble Tea to quit.
 func (h *Host) Quit() bool { return h.quit }
+
+// Restart is the path the app asked to be run again through as it quit, after an Upgrade.
+func (h *Host) Restart() string { return h.model.(host.Model).Restart() }
 
 // Clears counts the times the app has asked Bubble Tea to clear the screen.
 func (h *Host) Clears() int { return h.clears }

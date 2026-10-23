@@ -68,7 +68,14 @@ func (m Model) footer() string {
 	case m.configProblem != "":
 		toast = th.Fg(theme.Warn).Render(m.configProblem) + "  "
 	}
-	return ansi.Truncate(badge+" "+toast+th.Fg(hintTok).Render(hints), m.w, "…")
+	line := badge + " " + toast + th.Fg(hintTok).Render(hints)
+	pill := m.pill()
+	pw := ansi.StringWidth(pill)
+	if pill == "" || m.w < pw+len(mode)+2 {
+		return ansi.Truncate(line, m.w, "…")
+	}
+	line = ansi.Truncate(line, m.w-pw-1, "…")
+	return line + strings.Repeat(" ", m.w-ansi.StringWidth(line)-pw) + pill
 }
 
 func modifierHints(name string, bindings []key.Binding, uses func(key string) bool) string {

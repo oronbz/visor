@@ -29,9 +29,11 @@ type Config struct {
 	TimeFormat string
 	WeekStart  string
 	Mouse      bool
-	Colors     theme.Overrides
-	Widgets    []Widget
-	Plugins    []Plugin
+	// UpgradeCheck turns the check for a new visor release on.
+	UpgradeCheck bool
+	Colors       theme.Overrides
+	Widgets      []Widget
+	Plugins      []Plugin
 	// Problems are toast messages, each naming file:line, for options that
 	// were ignored and Widgets that went to needs setup.
 	Problems []string
@@ -107,7 +109,7 @@ func Default(types []widget.Type, loc Locale) Config {
 
 func globalsOnly(loc Locale) Config {
 	g := widget.Defaults(Globals(loc))
-	return Config{Theme: g.String("theme"), TimeFormat: g.String("time_format"), WeekStart: g.String("week_start"), Mouse: g.Bool("mouse")}
+	return Config{Theme: g.String("theme"), TimeFormat: g.String("time_format"), WeekStart: g.String("week_start"), Mouse: g.Bool("mouse"), UpgradeCheck: g.Bool("upgrade_check")}
 }
 
 // Load reads the config at path, validating it against types. A missing
@@ -215,6 +217,8 @@ func (p *parser) parse(doc map[string]any, loc Locale) Config {
 			c.WeekStart = val.(string)
 		case "mouse":
 			c.Mouse = val.(bool)
+		case "upgrade_check":
+			c.UpgradeCheck = val.(bool)
 		}
 	}
 	c.Widgets = p.dedupe(c.Widgets)

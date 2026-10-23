@@ -3,6 +3,7 @@ package hosttest
 import (
 	"context"
 	"errors"
+	"io"
 	"os/exec"
 	"slices"
 	"strings"
@@ -406,4 +407,39 @@ func (e *EventKit) Complete(_ context.Context, id string) error {
 	e.Open = slices.Delete(e.Open, i, i+1)
 	e.Completed = append(e.Completed, id)
 	return nil
+}
+
+// Foreground records every command run on the terminal. Err, when set, is
+// how each one fails; Output is what Run prints.
+type Foreground struct {
+	mu     sync.Mutex
+	Calls  [][]string
+	Output string
+	Err    error
+}
+
+func (f *Foreground) Run(name string, args []string, stdout, _ io.Writer) error {
+	f.record(name, args)
+	_, _ = io.WriteString(stdout, f.Output)
+	return f.Err
+}
+
+func (f *Foreground) Suspend(name string, args []string, done func(error) tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		f.record(name, args)
+		return done(f.Err)
+	}
+}
+
+func (f *Foreground) record(name string, args []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Calls = append(f.Calls, append([]string{name}, args...))
+}
+
+// Ran is a copy of Calls, safe to take while commands may still run.
+func (f *Foreground) Ran() [][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.Calls)
 }

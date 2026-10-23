@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/oronbz/visor/internal/paths"
+	"github.com/oronbz/visor/internal/version"
 	bundled "github.com/oronbz/visor/skills"
 )
 
@@ -382,26 +383,11 @@ func isStamped(dir string) bool {
 // build is never ahead of anything; a stamp that isn't a release is behind
 // every release.
 func older(was, now string) bool {
-	n, ok := parseVersion(now)
-	if !ok {
+	if _, ok := version.Parse(now); !ok {
 		return false
 	}
-	w, ok := parseVersion(was)
-	if !ok {
+	if _, ok := version.Parse(was); !ok {
 		return true
 	}
-	return slices.Compare(w, n) < 0
-}
-
-func parseVersion(v string) ([]int, bool) {
-	v, _, _ = strings.Cut(strings.TrimPrefix(v, "v"), "-")
-	var out []int
-	for f := range strings.SplitSeq(v, ".") {
-		n, err := strconv.Atoi(f)
-		if err != nil {
-			return nil, false
-		}
-		out = append(out, n)
-	}
-	return out, true
+	return version.Behind(was, now)
 }

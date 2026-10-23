@@ -24,7 +24,7 @@ func (m Model) version() string {
 	if m.opts.Version != "" {
 		return m.opts.Version
 	}
-	return version.Version
+	return version.Current()
 }
 
 func (m Model) skillsInstaller() (skills.Installer, error) {

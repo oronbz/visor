@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -36,9 +38,13 @@ type System struct {
 	Ports *ports.Ports
 	// ProgramOptions are extra Bubble Tea options, such as a fixed window size in tests.
 	ProgramOptions []tea.ProgramOption
-	// Executable is visor's own path; the Plugins visor ships with sit next
-	// to it. Empty ships none.
+	// Executable is the path visor was launched by; the Plugins visor ships
+	// with sit next to the file it links to. Empty ships none.
 	Executable string
+	// Version is the version visor runs as; "" is the one it was built as.
+	Version string
+	// Exec replaces the process with path, after an Upgrade; nil is syscall.Exec.
+	Exec func(path string, args []string) error
 }
 
 const usage = `Usage: visor [--config <path>] [--close-key <keys>]... [--version]
@@ -63,6 +69,9 @@ const usage = `Usage: visor [--config <path>] [--close-key <keys>]... [--version
                              agent skills to ~/.agents/skills, linked into
                              Claude Code's skills when it's set up
        visor skills uninstall remove the skills visor installed
+       visor upgrade          check for a new visor release now, and run
+                             brew for a Homebrew install or print what
+                             to run
 
 visor draws a full-screen dashboard of your day. Press q to quit.
 The config is $XDG_CONFIG_HOME/visor/config.toml (default ~/.config/visor),
@@ -95,8 +104,9 @@ func Run(s System) int {
 		}
 		closeKeys = append(closeKeys, seq)
 	}
+	running := cmp.Or(s.Version, version.Current())
 	if *showVersion {
-		fmt.Fprintln(s.Stdout, "visor", version.Version)
+		fmt.Fprintln(s.Stdout, "visor", running)
 		return 0
 	}
 
@@ -150,6 +160,8 @@ func Run(s System) int {
 		return configInit(s, configFile, reference())
 	case "auth jira":
 		return authJira(s, pp, editor())
+	case "upgrade":
+		return upgradeCommand(s, pp, p, running)
 	default:
 		fmt.Fprintf(s.Stderr, "visor: unknown command %q\n\n%s", strings.Join(fs.Args(), " "), usage)
 		return 2
@@ -160,7 +172,23 @@ func Run(s System) int {
 		// Deferred, so a crash or a signal that ends the program restores herdr's menu too.
 		defer herdrRightClick(s.Getenv, pp.Commands, "herdr")
 	}
-	m := host.New(host.Options{Paths: p, ConfigFile: configFile, Locale: locale, Ports: pp, CloseKeys: closeKeys, BundleDir: bundle})
+	restart, code := runTUI(s, pp, host.Options{Paths: p, ConfigFile: configFile, Locale: locale, Ports: pp, CloseKeys: closeKeys,
+		BundleDir: bundle, Executable: s.Executable, Version: s.Version})
+	if restart != "" {
+		reexec := s.Exec
+		if reexec == nil {
+			reexec = func(path string, args []string) error { return syscall.Exec(path, args, os.Environ()) }
+		}
+		err := reexec(restart, append([]string{restart}, s.Args...))
+		fmt.Fprintln(s.Stderr, "visor: upgraded; restart visor:", err)
+	}
+	return code
+}
+
+// runTUI runs the dashboard until it quits, cleaning up after it, and
+// returns the path to run visor again through after an Upgrade, or "".
+func runTUI(s System, pp ports.Ports, o host.Options) (restart string, code int) {
+	m := host.New(o)
 	var opts []tea.ProgramOption
 	// Real files get Bubble Tea's defaults, which open /dev/tty when stdin is piped.
 	if _, isFile := s.Stdin.(*os.File); !isFile {
@@ -175,11 +203,15 @@ func Run(s System) int {
 	}
 	// Every copy of the model shares its Plugins, so this stops them however the program ends.
 	defer m.Close()
-	if _, err := tea.NewProgram(m, opts...).Run(); err != nil {
+	final, err := tea.NewProgram(m, opts...).Run()
+	if err != nil {
 		fmt.Fprintln(s.Stderr, "visor:", err)
-		return 1
+		return "", 1
 	}
-	return 0
+	if f, ok := final.(host.Model); ok {
+		restart = f.Restart()
+	}
+	return restart, 0
 }
 
 // bundleDir is the directory visor is installed in: the real file's, since

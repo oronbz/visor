@@ -4,6 +4,7 @@ package ports
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"time"
 
@@ -17,14 +18,16 @@ type Ports struct {
 	Editor    Editor
 	Keyring   Keyring
 	Commands  Commands
-	EventKit  EventKit
-	Machine   Machine
-	Watcher   Watcher
-	Inbox     Inbox
-	HTTP      *http.Client
-	Endpoints Endpoints
-	Getenv    func(key string) string
-	Locale    func() SystemLocale
+	// Foreground runs commands on the terminal, such as brew for an Upgrade.
+	Foreground Foreground
+	EventKit   EventKit
+	Machine    Machine
+	Watcher    Watcher
+	Inbox      Inbox
+	HTTP       *http.Client
+	Endpoints  Endpoints
+	Getenv     func(key string) string
+	Locale     func() SystemLocale
 }
 
 // SystemLocale is the clock style ("12h" or "24h") and first weekday
@@ -99,6 +102,14 @@ type Stats struct {
 // Commands runs other CLIs visor borrows from, such as `gh auth token` and `herdr`.
 type Commands interface {
 	Output(ctx context.Context, name string, args ...string) ([]byte, error)
+}
+
+// Foreground runs a command with the terminal as its stdio, so its output shows.
+type Foreground interface {
+	// Run runs it to the end on stdin and the given writers, for subcommands.
+	Run(name string, args []string, stdout, stderr io.Writer) error
+	// Suspend runs it while the TUI is suspended, then calls done.
+	Suspend(name string, args []string, done func(error) tea.Msg) tea.Cmd
 }
 
 type Access int

@@ -38,11 +38,14 @@ type click struct {
 }
 
 func (m Model) mouseMsg(msg tea.MouseMsg) (Model, tea.Cmd) {
-	if !m.mouse || m.keyMap || m.overlay != nil || m.palette != nil || m.editing != nil || m.picking || m.arranging {
+	if !m.mouse || m.showsPopup() {
 		return m, nil
 	}
 	if m.menu != nil {
 		return m.menuMouse(msg)
+	}
+	if m.modal() {
+		return m, nil
 	}
 	ms := msg.Mouse()
 	s := m.scene()
@@ -58,6 +61,8 @@ func (m Model) mouseMsg(msg tea.MouseMsg) (Model, tea.Cmd) {
 		}
 	case tea.MouseClickMsg:
 		switch {
+		case ms.Button == tea.MouseLeft && m.onPill(ms.X, ms.Y):
+			return m.askUpgrade()
 		case !hit:
 		case ms.Button == tea.MouseLeft:
 			return m.press(s, z, ms.X, ms.Y)
@@ -137,7 +142,7 @@ func (m Model) selectItem(id string, i int) Model {
 // view has the input.
 func (m Model) pointer() layout.Pointer {
 	var p layout.Pointer
-	if m.keyMap || m.overlay != nil || m.palette != nil || m.menu != nil || m.editing != nil || m.picking || m.arranging {
+	if m.upgrades.popup || m.modal() {
 		return p
 	}
 	if d := m.drag; d != nil {

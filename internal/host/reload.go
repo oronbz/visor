@@ -13,9 +13,10 @@ import (
 type filesChangedMsg struct{ files []string }
 
 // watch points the file watcher at every file visor reads: config.toml,
-// layout.json, the plugins directory and each Watcher Widget's files.
+// layout.json, the plugins directory, the Upgrade state and each Watcher
+// Widget's files.
 func (m Model) watch() Model {
-	files := []string{m.configEditor.Path, m.layoutFile(), m.pluginsDir()}
+	files := []string{m.configEditor.Path, m.layoutFile(), m.pluginsDir(), m.upgradeStore().File}
 	for _, id := range m.ids() {
 		if key := m.sched[id].key; key != "" {
 			files = append(files, m.cache.File(key))
@@ -48,6 +49,9 @@ func (m Model) filesChanged(msg filesChangedMsg) (Model, tea.Cmd) {
 	}
 	if slices.Contains(msg.files, m.layoutFile()) {
 		m = m.reloadLayout()
+	}
+	if slices.Contains(msg.files, m.upgradeStore().File) {
+		m = m.adoptUpgrade(m.upgradeStore().Load())
 	}
 	for _, id := range m.ids() {
 		var cmd tea.Cmd
@@ -85,7 +89,12 @@ func (m Model) reloadConfig() (Model, []string, tea.Cmd) {
 	m.colors.name, m.colors.over = cfg.Theme, cfg.Colors
 	m = m.resolveTheme()
 
+	checked := m.upgrades.on
 	m, ids, fresh, clamped := m.placeAll(cfg)
+	if m.upgrades.on && !checked {
+		m.upgrades.chain++
+		cmds = append(cmds, m.upgradeDue())
+	}
 	m.configProblem = toastOf(slices.Concat(cfg.Problems, problems, clamped))
 	m.layout = m.layout.Join(ids)
 	if m.arranging {

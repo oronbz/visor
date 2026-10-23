@@ -14,7 +14,7 @@ type keyMap struct {
 	Quit, Unfocus, NextRow, PrevRow, Left, Right key.Binding
 	MoveLeft, MoveDown, MoveUp, MoveRight        key.Binding
 	Arrange, Widgets, Jump, Help, Palette, Menu  key.Binding
-	Refresh                                      key.Binding
+	Refresh, Upgrade                             key.Binding
 	Down, Up, First, Last, Primary               key.Binding
 	Shift, Grow, Keep, Revert                    key.Binding
 }
@@ -36,12 +36,14 @@ var keys = keyMap{
 	Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "key map")),
 	Palette:   key.NewBinding(key.WithKeys("ctrl+k", ":"), key.WithHelp("^K :", "Action palette: every Widget's Actions")),
 	Refresh:   key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("^R", "refresh every Widget now")),
-	Menu:      key.NewBinding(key.WithKeys("."), key.WithHelp(".", "Action menu of the selected Item (right-click)")),
-	Down:      key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("↓ j", "next Item")),
-	Up:        key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("↑ k", "previous Item")),
-	First:     key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "first Item")),
-	Last:      key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "last Item")),
-	Primary:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "run the Item's primary Action")),
+	// Upgrade isn't a host key: a focused Widget's own U Action wins.
+	Upgrade: key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "upgrade visor, while a new release is out")),
+	Menu:    key.NewBinding(key.WithKeys("."), key.WithHelp(".", "Action menu of the selected Item (right-click)")),
+	Down:    key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("↓ j", "next Item")),
+	Up:      key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("↑ k", "previous Item")),
+	First:   key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "first Item")),
+	Last:    key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "last Item")),
+	Primary: key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "run the Item's primary Action")),
 
 	Shift:  key.NewBinding(key.WithKeys("h", "j", "k", "l", "left", "down", "up", "right"), key.WithHelp("←↓↑→ hjkl", "arrange: move one place (past an edge opens a row or column)")),
 	Grow:   key.NewBinding(key.WithKeys("H", "J", "K", "L", "shift+left", "shift+down", "shift+up", "shift+right"), key.WithHelp("S-←↓↑→ HJKL", "arrange: resize")),
@@ -50,7 +52,9 @@ var keys = keyMap{
 }
 
 // Bindings lists every host key binding, in key map order.
-func Bindings() []key.Binding { return append(normalBindings(), arrangeBindings()...) }
+func Bindings() []key.Binding {
+	return slices.Concat(normalBindings(), []key.Binding{keys.Upgrade}, arrangeBindings())
+}
 
 func normalBindings() []key.Binding {
 	k := keys
@@ -101,6 +105,9 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.keyMap = false
 		}
 		return m, nil
+	}
+	if m.showsPopup() {
+		return m.popupKey(msg)
 	}
 	if m.overlay != nil {
 		return m.overlayKey(msg)
@@ -184,11 +191,19 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if a, ok := m.actionFor(msg.String()); ok && m.focus != "" {
 			return m.run(m.focus, a)
 		}
+		if key.Matches(msg, keys.Upgrade) {
+			return m.askUpgrade()
+		}
 	}
 	if m.focus != "" {
 		m.last = m.focus
 	}
 	return m, nil
+}
+
+// modal reports whether a view other than the dashboard has the input.
+func (m Model) modal() bool {
+	return m.keyMap || m.overlay != nil || m.palette != nil || m.menu != nil || m.editing != nil || m.picking || m.arranging
 }
 
 // laidOut lays every visible Widget out. While the terminal is too small to

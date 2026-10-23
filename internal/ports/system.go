@@ -3,7 +3,9 @@ package ports
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -21,20 +23,21 @@ var ErrSecretNotFound = keyring.ErrNotFound
 // System returns the real adapters. getenv is the process environment.
 func System(getenv func(string) string) Ports {
 	return Ports{
-		Clock:     systemClock{},
-		Opener:    systemOpener{},
-		Clipboard: osc52{},
-		Editor:    execEditor{getenv: getenv},
-		Keyring:   osKeyring{},
-		Commands:  execCommands{},
-		EventKit:  newEventKit(),
-		Machine:   newMachine(),
-		Watcher:   newFSWatcher(),
-		Inbox:     channelInbox{},
-		HTTP:      &http.Client{Timeout: 30 * time.Second},
-		Endpoints: DefaultEndpoints(),
-		Getenv:    getenv,
-		Locale:    systemLocale,
+		Clock:      systemClock{},
+		Opener:     systemOpener{},
+		Clipboard:  osc52{},
+		Editor:     execEditor{getenv: getenv},
+		Keyring:    osKeyring{},
+		Commands:   execCommands{},
+		Foreground: execForeground{},
+		EventKit:   newEventKit(),
+		Machine:    newMachine(),
+		Watcher:    newFSWatcher(),
+		Inbox:      channelInbox{},
+		HTTP:       &http.Client{Timeout: 30 * time.Second},
+		Endpoints:  DefaultEndpoints(),
+		Getenv:     getenv,
+		Locale:     systemLocale,
 	}
 }
 
@@ -101,6 +104,18 @@ func editorCommand(getenv func(string) string, goos, path string, line int) *exe
 		}
 	}
 	return exec.Command("sh", "-c", script, path)
+}
+
+type execForeground struct{}
+
+func (execForeground) Run(name string, args []string, stdout, stderr io.Writer) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, stdout, stderr
+	return cmd.Run()
+}
+
+func (execForeground) Suspend(name string, args []string, done func(error) tea.Msg) tea.Cmd {
+	return tea.ExecProcess(exec.Command(name, args...), func(err error) tea.Msg { return done(err) })
 }
 
 type osKeyring struct{}

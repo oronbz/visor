@@ -26,6 +26,7 @@ import (
 	"github.com/oronbz/visor/internal/ports"
 	"github.com/oronbz/visor/internal/render"
 	"github.com/oronbz/visor/internal/theme"
+	"github.com/oronbz/visor/internal/upgrade"
 	"github.com/oronbz/visor/internal/widget"
 	"github.com/oronbz/visor/internal/widgets/calendar"
 	"github.com/oronbz/visor/internal/widgets/clock"
@@ -55,6 +56,9 @@ type Options struct {
 	Version string
 	// BundleDir is where visor's executable and the Plugins it ships with sit.
 	BundleDir string
+	// Executable is the path visor was launched by, before symlinks: what an
+	// Upgrade detects the install from and runs the new visor through.
+	Executable string
 }
 
 // Model is the root tea.Model. Its maps are shared by Model copies, so only
@@ -111,6 +115,7 @@ type Model struct {
 	pushes   chan tea.Msg
 	observed map[string]observation
 	images   *images
+	upgrades upgrades
 }
 
 type placed struct {
@@ -146,6 +151,7 @@ func New(o Options) Model {
 	if err != nil {
 		problems = append([]string{err.Error()}, problems...)
 	}
+	m.upgrades = upgrades{install: upgrade.Here(o.Executable, m.getenv), known: m.upgradeStore().Load()}
 	m.colors = colors{pinned: !o.Theme.IsZero(), name: cfg.Theme, over: cfg.Colors, asking: o.Theme.IsZero()}
 	m = m.resolveTheme()
 	m.configEditor = config.NewEditor(file, o.Paths.Data, types, o.Locale)
@@ -168,6 +174,7 @@ func (m Model) placeAll(cfg config.Config) (Model, []string, []string, []string)
 	old := m.widgets
 	sameGlobals := cfg.TimeFormat == m.widgetBase.TimeFormat && cfg.WeekStart == m.widgetBase.WeekStart
 	m.mouse = cfg.Mouse
+	m.upgrades.on = cfg.UpgradeCheck
 	m.widgetBase = widget.Config{TimeFormat: cfg.TimeFormat, WeekStart: cfg.WeekStart, DataDir: m.opts.Paths.Data, Ports: m.opts.Ports}
 	m.widgets = make(map[string]placed, len(cfg.Widgets))
 	var ids, fresh, problems []string
@@ -226,7 +233,7 @@ func (m Model) place(wc config.Widget, ref config.Ref) placed {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.nextTick(), m.queryTerminal(), m.nextChange(), m.nextPush(), m.listen(m.ids()), func() tea.Msg { return startMsg{} }, m.cleanCache(), m.refreshSkills())
+	return tea.Batch(m.nextTick(), m.queryTerminal(), m.nextChange(), m.nextPush(), m.listen(m.ids()), func() tea.Msg { return startMsg{} }, m.cleanCache(), m.refreshSkills(), m.upgradeDue())
 }
 
 func (m Model) baseTypes() []widget.Type {
@@ -239,7 +246,7 @@ func (m Model) baseTypes() []widget.Type {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.images.answer(msg)
 	next, cmd := m.update(msg)
-	n := next.(Model)
+	n := next.(Model).offerUpgrade()
 	n.observe()
 	return n, tea.Batch(cmd, n.syncImages())
 }
@@ -290,6 +297,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.skillsDone(msg)
 	case configEditedMsg:
 		return m.configEdited(msg)
+	case upgradeDueMsg:
+		return m, m.checkUpgrade(msg)
+	case upgradeCheckedMsg:
+		return m.upgradeChecked(msg)
+	case upgradedMsg:
+		return m.upgraded(msg)
 	case toastExpiredMsg:
 		if m.toast.seq == msg.seq {
 			m.toast = toast{}
@@ -378,6 +391,9 @@ func (m Model) View() tea.View {
 	}
 	if m.overlay != nil {
 		layers = append(layers, m.overlayLayer())
+	}
+	if m.showsPopup() {
+		layers = append(layers, m.popupLayer())
 	}
 	canvas := lipgloss.NewCanvas(m.w, m.h)
 	lipgloss.NewCompositor(layers...).Draw(canvas, image.Rect(0, 0, m.w, m.h))

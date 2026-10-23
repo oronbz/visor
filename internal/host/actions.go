@@ -170,6 +170,7 @@ const (
 	saveSettings
 	installSkills
 	runCommand
+	upgradeVisor
 )
 
 // actions are Widget id's Actions as they apply now: the user's own from
@@ -338,10 +339,7 @@ func (m Model) run(id string, a bound) (Model, tea.Cmd) {
 		}
 		m.overlay = o
 		if a.Target != "" {
-			opener, target := m.opts.Ports.Opener, a.Target
-			return m, func() tea.Msg {
-				return actedMsg{id: id, action: a.Action, err: opener.Open(target), byHost: true}
-			}
+			return m, m.open(id, a.Action, a.Target)
 		}
 	case a.Input == widget.ChoiceInput:
 		return m.choose(id, a)
@@ -364,6 +362,8 @@ func (m Model) invoke(id string, a bound, text string) (Model, tea.Cmd) {
 		return m, m.editConfig(id, a)
 	case a.by == installSkills:
 		return m, m.installSkills()
+	case a.by == upgradeVisor:
+		return m.startUpgrade()
 	case a.by == runCommand:
 		return m, func() tea.Msg {
 			out, err := shell.Run(context.Background(), a.command)
@@ -374,10 +374,7 @@ func (m Model) invoke(id string, a bound, text string) (Model, tea.Cmd) {
 			return actedMsg{id: id, item: a.item, action: a.Action, result: widget.Result{Toast: toast}, err: err}
 		}
 	case a.Verb == widget.Open:
-		opener, target := m.opts.Ports.Opener, a.Target
-		return m, func() tea.Msg {
-			return actedMsg{id: id, action: a.Action, err: opener.Open(target), byHost: true}
-		}
+		return m, m.open(id, a.Action, a.Target)
 	case a.Verb == widget.Copy:
 		m, toast := m.say("Copied to the clipboard", theme.Fg)
 		return m, tea.Batch(m.opts.Ports.Clipboard.Copy(a.Target), toast)
@@ -397,6 +394,14 @@ func (m Model) invoke(id string, a bound, text string) (Model, tea.Cmd) {
 			res.Toast, err = widget.Redact(res.Toast, text), redactErr(err, text)
 		}
 		return actedMsg{id: id, item: a.item, action: a.Action, result: res, err: err}
+	}
+}
+
+// open hands target to the system opener for Action a of Widget id.
+func (m Model) open(id string, a widget.Action, target string) tea.Cmd {
+	opener := m.opts.Ports.Opener
+	return func() tea.Msg {
+		return actedMsg{id: id, action: a, err: opener.Open(target), byHost: true}
 	}
 }
 
