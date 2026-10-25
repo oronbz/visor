@@ -113,6 +113,20 @@ func TestEnterOpensTheIssue(t *testing.T) {
 	}
 }
 
+func TestCCopiesTheIssuesURL(t *testing.T) {
+	j := workflow(t)
+	h := withJira(t, j, hosttest.Options{})
+	h.Press("1", "c")
+	if got := h.Clipboard.Copied; len(got) != 1 || got[0] != "https://acme.atlassian.net/browse/OPS-12" {
+		t.Errorf("copied %q, want the issue's page", got)
+	}
+	for _, r := range j.Requests() {
+		if r.Method == http.MethodPost {
+			t.Errorf("copying posted %v to Jira", r)
+		}
+	}
+}
+
 func TestARejectedTransitionToastsJirasReason(t *testing.T) {
 	j := workflow(t)
 	h := withJira(t, j, hosttest.Options{Width: 100, Height: 12})

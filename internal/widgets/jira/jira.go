@@ -182,6 +182,7 @@ func (w jira) payload(issues []issueJSON) widget.Payload {
 			Actions: []widget.Action{
 				{ID: "open", Key: "enter", Label: "open", Primary: true, Verb: widget.Open, Target: w.browse(is.Key)},
 				{ID: transitionAction, Key: "t", Label: "transition", Input: widget.ChoiceInput, Prompt: "Transition " + is.Key},
+				{ID: "copy", Key: "c", Label: "copy url", Verb: widget.Copy, Target: w.browse(is.Key)},
 			},
 		})
 	}
