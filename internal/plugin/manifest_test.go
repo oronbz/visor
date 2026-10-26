@@ -161,7 +161,7 @@ func TestTheProtocolSchemaDescribesARealSession(t *testing.T) {
 // `visor plugin check` passes a Plugin only if visor can show what it sends.
 func TestTheHostAndTheSchemaRejectTheSameRefreshes(t *testing.T) {
 	for mode, rejected := range map[string]bool{
-		"items": false, "lines": false, "setup": false, "error": false,
+		"items": false, "lines": false, "setup": false, "bare-setup": false, "error": false, "rate-limited": false,
 		"image-file": false, "raw-colour": true, "malformed": true, "unknown-field": true, "two-images": true, "bad-side": true,
 		"rejected": false, "unknown-secret": true, "own-secret": true,
 	} {
@@ -172,12 +172,42 @@ func TestTheHostAndTheSchemaRejectTheSameRefreshes(t *testing.T) {
 			if host := err != nil && strings.HasPrefix(err.Error(), "Plugin `fixture` sent"); host != rejected {
 				t.Errorf("the host rejects it: %t (%v), want %t", host, err, rejected)
 			}
-			var out bytes.Buffer
-			if passed := plugin.Check(plugintest.Write(t, t.TempDir(), o), plugin.CheckOptions{Clock: &clock{now: t0}}, &out); passed == rejected {
-				t.Errorf("the check passes it: %t, want %t\n%s", passed, !rejected, &out)
+			if passed, out := check(t, o); passed == rejected {
+				t.Errorf("the check passes it: %t, want %t\n%s", passed, !rejected, out)
 			}
 		})
 	}
+}
+
+// A Plugin may push a status the moment it finds trouble; the check fails
+// only a push visor can't use, and says why.
+func TestTheCheckPassesPushedStatusesVisorCanShow(t *testing.T) {
+	for mode, says := range map[string]string{
+		"pushed-setup":          "pushed needs setup: Sign in to Fixture (⏎ sign in)",
+		"pushed-error":          "pushed error: upstream is down",
+		"pushed-rate-limited":   "pushed rate limited until 2030-01-01T00:00:00Z",
+		"pushed-unknown-secret": "widget/update: Plugin `fixture` sent setup naming Action `secret:password`",
+		"pushed-unknown-field":  "widget/update breaks the schema",
+		"pushed-own-secret":     "widget/update: Plugin `fixture` sent Action `secret:token`",
+		"crash-on-focus":        "FAIL  refresh fixture  Plugin `fixture` stopped",
+	} {
+		t.Run(mode, func(t *testing.T) {
+			passed, out := check(t, plugintest.Options{Mode: mode})
+			if rejected := !strings.HasPrefix(says, "pushed "); passed == rejected {
+				t.Errorf("the check passes it: %t, want %t\n%s", passed, !rejected, out)
+			}
+			if !strings.Contains(out, says) {
+				t.Errorf("the check doesn't say %q\n%s", says, out)
+			}
+		})
+	}
+}
+
+// check runs `visor plugin check` on the fixture Plugin set up as o.
+func check(t *testing.T, o plugintest.Options) (bool, string) {
+	var out bytes.Buffer
+	passed := plugin.Check(plugintest.Write(t, t.TempDir(), o), plugin.CheckOptions{Clock: &clock{now: t0}}, &out)
+	return passed, out.String()
 }
 
 func TestTheFixtureManifestMatchesTheSchema(t *testing.T) {

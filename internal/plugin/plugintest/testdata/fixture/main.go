@@ -5,7 +5,9 @@
 // Flags pick process-wide behaviour (-protocol answers the handshake with
 // another version, -handshake silent never answers it and -handshake empty
 // answers without a version, -log records every message); each Widget's
-// `mode` setting picks what its refreshes return.
+// `mode` setting picks what its refreshes return, and a `pushed-` mode
+// pushes what that mode returns when the Widget gains focus, and
+// `crash-on-focus` exits then.
 package main
 
 import (
@@ -14,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -141,14 +144,22 @@ func (f *fixture) handle(msg message) {
 		focused := p.Focused && !w.Focused
 		w.Size, w.Focused, w.Visible = p.Size, p.Focused, p.Visible
 		f.mu.Unlock()
-		if focused {
-			f.send(message{Method: "widget/update", Params: raw(map[string]any{
-				"widget": w.ID,
-				"payload": map[string]any{"lines": []any{
-					line("accent", fmt.Sprintf("pushed: focused at %d×%d after %d refreshes", p.Size.Width, p.Size.Height, f.count(w.ID))),
-				}, "actions": widgetActions},
-			})})
+		if !focused {
+			return
 		}
+		update := map[string]any{"payload": map[string]any{"lines": []any{
+			line("accent", fmt.Sprintf("pushed: focused at %d×%d after %d refreshes", p.Size.Width, p.Size.Height, f.count(w.ID))),
+		}, "actions": widgetActions}}
+		mode, _ := w.Settings["mode"].(string)
+		if mode == "crash-on-focus" {
+			fmt.Fprintln(os.Stderr, "fixture: focused, then crashed")
+			os.Exit(3)
+		}
+		if base, ok := strings.CutPrefix(mode, "pushed-"); ok {
+			update = f.result(w, base, f.count(w.ID))
+		}
+		update["widget"] = w.ID
+		f.send(message{Method: "widget/update", Params: raw(update)})
 	case "widget/refresh":
 		if w == nil {
 			f.fail(msg.ID, -32602, "no widget "+p.ID)
@@ -182,61 +193,76 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 	f.refreshes[w.ID]++
 	n := f.refreshes[w.ID]
 	f.mu.Unlock()
+	mode, _ := w.Settings["mode"].(string)
+	if strings.HasPrefix(mode, "pushed-") {
+		mode = "items"
+	}
+	if mode == "malformed" {
+		f.mu.Lock()
+		os.Stdout.WriteString("{this is not json\n")
+		f.mu.Unlock()
+		return
+	}
+	f.reply(id, f.result(w, mode, n))
+}
+
+// result is what a refresh in mode returns, the n-th time.
+func (f *fixture) result(w *widget, mode string, n int) map[string]any {
 	greeting, _ := w.Settings["greeting"].(string)
 	signedIn := ""
 	if _, ok := w.Settings["token"].(string); ok {
 		signedIn = " (signed in)"
 	}
-	switch mode, _ := w.Settings["mode"].(string); mode {
+	switch mode {
 	case "lines":
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{
+		return map[string]any{"payload": map[string]any{"lines": []any{
 			line("accent", greeting+" from lines"),
 			map[string]any{"digits": "half-block", "spans": []any{map[string]any{"text": "12:34", "token": "fg"}}},
 			line("dim", fmt.Sprintf("refresh %d", n)),
-		}, "image": map[string]any{"data": pixel, "side": "right"}}})
+		}, "image": map[string]any{"data": pixel, "side": "right"}}}
 	case "image-file":
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"path": "pixel.png"}}})
+		return map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"path": "pixel.png"}}}
 	case "two-images":
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"data": pixel, "path": "/tmp/pixel.png"}}})
+		return map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"data": pixel, "path": "/tmp/pixel.png"}}}
 	case "bad-side":
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"data": pixel, "side": "under"}}})
+		return map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "image": map[string]any{"data": pixel, "side": "under"}}}
 	case "number-value":
-		f.reply(id, map[string]any{"payload": map[string]any{
+		return map[string]any{"payload": map[string]any{
 			"columns": []any{map[string]any{"flex": true}},
 			"items":   []any{map[string]any{"id": "alpha", "fields": []any{[]any{map[string]any{"text": "alpha", "token": "fg"}}}, "values": map[string]any{"points": 3}}},
-		}})
+		}}
 	case "raw-colour":
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("#ff0000", "red")}}})
+		return map[string]any{"payload": map[string]any{"lines": []any{line("#ff0000", "red")}}}
 	case "unknown-field":
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "colour": "red"}})
-	case "malformed":
-		f.mu.Lock()
-		os.Stdout.WriteString("{this is not json\n")
-		f.mu.Unlock()
+		return map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "colour": "red"}}
 	case "setup":
-		f.reply(id, map[string]any{"status": map[string]any{
+		return map[string]any{"status": map[string]any{
 			"state": "setup", "message": "Sign in to Fixture",
 			"action": map[string]any{"id": "sign-in", "label": "sign in", "input": "secret", "prompt": "Fixture token"},
-		}})
+		}}
+	case "bare-setup":
+		return map[string]any{"status": map[string]any{"state": "setup", "message": "Install the Fixture tool"}}
 	case "rejected":
-		f.reply(id, map[string]any{"status": map[string]any{"state": "setup", "message": "Fixture rejected the token", "action": "secret:token"}})
+		return map[string]any{"status": map[string]any{"state": "setup", "message": "Fixture rejected the token", "action": "secret:token"}}
 	case "unknown-secret":
-		f.reply(id, map[string]any{"status": map[string]any{"state": "setup", "message": "Fixture needs a password", "action": "secret:password"}})
+		return map[string]any{"status": map[string]any{"state": "setup", "message": "Fixture needs a password", "action": "secret:password"}}
 	case "own-secret":
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "actions": []any{
+		return map[string]any{"payload": map[string]any{"lines": []any{line("fg", "hi")}, "actions": []any{
 			map[string]any{"id": "secret:token", "label": "Set token my way", "input": "secret"},
-		}}})
+		}}}
 	case "leak":
 		// Echoes the stored token on purpose: the host must mask it everywhere.
-		f.reply(id, map[string]any{"payload": map[string]any{"lines": []any{line("fg", "token "+token(w))}, "actions": []any{
+		return map[string]any{"payload": map[string]any{"lines": []any{line("fg", "token "+token(w))}, "actions": []any{
 			map[string]any{"id": "leak-toast", "key": "t", "label": "leak toast"},
 			map[string]any{"id": "leak-error", "key": "e", "label": "leak error"},
 			map[string]any{"id": "leak-crash", "key": "x", "label": "leak crash"},
-		}}})
+		}}}
 	case "leak-status":
-		f.reply(id, map[string]any{"status": map[string]any{"state": "error", "message": "upstream refused " + token(w), "reason": "refused"}})
+		return map[string]any{"status": map[string]any{"state": "error", "message": "upstream refused " + token(w), "reason": "refused"}}
 	case "error":
-		f.reply(id, map[string]any{"status": map[string]any{"state": "error", "message": "upstream is down", "reason": "down", "hint": "try later"}})
+		return map[string]any{"status": map[string]any{"state": "error", "message": "upstream is down", "reason": "down", "hint": "try later"}}
+	case "rate-limited":
+		return map[string]any{"status": map[string]any{"state": "rate_limited", "message": "too many requests", "until": "2030-01-01T00:00:00Z"}}
 	default:
 		item := func(id, name string, values map[string]string) map[string]any {
 			it := map[string]any{
@@ -256,12 +282,12 @@ func (f *fixture) refresh(id json.RawMessage, w *widget) {
 			}
 			return it
 		}
-		f.reply(id, map[string]any{"payload": map[string]any{
+		return map[string]any{"payload": map[string]any{
 			"columns": []any{map[string]any{"flex": true}, map[string]any{"priority": 1, "right": true}},
 			"items":   []any{item("alpha", "alpha", map[string]string{"ticket": "FX-1; touch pwned"}), item("bravo", "bravo", nil)},
 			"count":   2,
 			"actions": widgetActions,
-		}})
+		}}
 	}
 }
 

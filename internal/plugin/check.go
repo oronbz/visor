@@ -125,18 +125,10 @@ func (c *checker) lifecycle(p *Plugin, wt WidgetType) {
 	c.step("refresh "+t.Name, func(ctx context.Context) (string, error) {
 		var err error
 		payload, err = w.Refresh(ctx, p.clock.Now())
-		var setup *widget.SetupError
-		var limited *widget.RateLimitError
-		var f failure
+		if detail, ok := reported(err); ok {
+			return detail, nil
+		}
 		switch {
-		case errors.As(err, &setup) && setup.Action != nil:
-			return fmt.Sprintf("needs setup: %s (⏎ %s)", setup.Hint, setup.Action.Label), nil
-		case errors.As(err, &setup):
-			return "needs setup: " + setup.Hint, nil
-		case errors.As(err, &limited):
-			return "rate limited until " + limited.Until.Format(time.RFC3339), nil
-		case errors.As(err, &f):
-			return "error: " + f.Error(), nil
 		case err != nil:
 			return "", err
 		case len(payload.Columns) > 0:
@@ -181,6 +173,29 @@ func (c *checker) lifecycle(p *Plugin, wt WidgetType) {
 	})
 }
 
+// reported describes err when it's a status the Plugin reported, which the
+// check passes; one visor made, such as the Plugin stopping, it fails.
+func reported(err error) (string, bool) {
+	var local *widget.LocalError
+	if errors.As(err, &local) {
+		return "", false
+	}
+	var setup *widget.SetupError
+	var limited *widget.RateLimitError
+	var f failure
+	switch {
+	case errors.As(err, &setup) && setup.Action != nil:
+		return fmt.Sprintf("needs setup: %s (⏎ %s)", setup.Hint, setup.Action.Label), true
+	case errors.As(err, &setup):
+		return "needs setup: " + setup.Hint, true
+	case errors.As(err, &limited):
+		return "rate limited until " + limited.Until.Format(time.RFC3339), true
+	case errors.As(err, &f):
+		return "error: " + f.Error(), true
+	}
+	return "", false
+}
+
 // choiceAction is the first choice Action in payload, on the first Item
 // that has one or on the Widget.
 func choiceAction(payload widget.Payload) (widget.Invocation, bool) {
@@ -196,8 +211,9 @@ func choiceAction(payload widget.Payload) (widget.Invocation, bool) {
 	return widget.Invocation{}, false
 }
 
-// checker runs steps, skipping the rest once one fails, and collects what
-// the schema finds wrong with the messages in between.
+// checker runs steps, skipping the rest once one fails. Between steps it
+// collects what the schema finds wrong with the messages, and the statuses
+// the Plugin pushes.
 type checker struct {
 	out     io.Writer
 	timeout time.Duration
@@ -207,6 +223,7 @@ type checker struct {
 	// asked is each request's method, by its id as JSON, to check its result.
 	asked map[string]string
 	bad   []string
+	noted []string
 }
 
 func (c *checker) step(name string, run func(context.Context) (string, error)) {
@@ -218,9 +235,10 @@ func (c *checker) step(name string, run func(context.Context) (string, error)) {
 	detail, err := run(ctx)
 	cancel()
 	c.mu.Lock()
-	why := c.bad
-	c.bad = nil
+	why, noted := c.bad, c.noted
+	c.bad, c.noted = nil, nil
 	c.mu.Unlock()
+	detail = strings.Join(slices.DeleteFunc(append([]string{detail}, noted...), func(s string) bool { return s == "" }), "; ")
 	if err != nil {
 		why = append([]string{err.Error()}, why...)
 	}
@@ -288,5 +306,9 @@ func (c *checker) pushed(push widget.Push) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if note, ok := reported(push.Err); ok {
+		c.noted = append(c.noted, "pushed "+note)
+		return
+	}
 	c.bad = append(c.bad, "widget/update: "+push.Err.Error())
 }
