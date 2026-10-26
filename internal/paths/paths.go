@@ -23,6 +23,9 @@ func Under(root string) Paths {
 	}
 }
 
+// Plugins is where installed Plugins live, one directory each.
+func (p Paths) Plugins() string { return filepath.Join(p.Data, "plugins") }
+
 // Home is HOME, else USERPROFILE (Windows sets only that).
 func Home(getenv func(string) string) string {
 	if getenv == nil {

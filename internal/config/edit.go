@@ -66,7 +66,7 @@ func (e Editor) Edit(change func(src []byte, c Config) ([]byte, error), check fu
 			base = []byte(Reference(e.Types, e.Locale))
 		}
 		for _, w := range before.Widgets {
-			base = appendBlock(base, block(w.Type, w.ID, nil))
+			base = appendBlock(base, Block(w.Type, w.ID, nil))
 		}
 		if mid, err = e.verify(base, func(after Config) error { return sameWidgets(before, after, true) }); err != nil {
 			return err
@@ -108,7 +108,7 @@ func (e Editor) AddWidget(typ string) (Widget, error) {
 	var added Widget
 	err := e.Edit(func(src []byte, c Config) ([]byte, error) {
 		added.ID = freshID(typ, c)
-		return appendBlock(src, block(typ, added.ID, e.Types[ti].Settings)), nil
+		return appendBlock(src, Block(typ, added.ID, e.Types[ti].Settings)), nil
 	}, func(before, after Config) error {
 		if len(after.Widgets) != len(before.Widgets)+1 {
 			return fmt.Errorf("%d Widgets, want %d", len(after.Widgets), len(before.Widgets)+1)
@@ -189,7 +189,7 @@ func (e Editor) SetSettings(typ string, r Ref, settings widget.Settings) (Widget
 	err := e.Edit(func(src []byte, c Config) ([]byte, error) {
 		if r.ID == "" {
 			id = freshID(typ, c)
-			return appendBlock(src, block(typ, id, nil)+fill.String()), nil
+			return appendBlock(src, Block(typ, id, nil)+fill.String()), nil
 		}
 		i, err := find(c, r)
 		if err != nil {
@@ -328,10 +328,12 @@ func freshID(typ string, c Config) string {
 	return id
 }
 
-func block(typ, id string, settings []widget.Setting) string {
+// Block is a [[widget]] block of type typ with id and the required settings
+// of schema at their defaults, as Add Widget writes it.
+func Block(typ, id string, schema []widget.Setting) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[[widget]]\ntype = %q\nid = %q\n", typ, id)
-	for _, s := range settings {
+	for _, s := range schema {
 		if s.Required && s.Kind != widget.Secret {
 			fmt.Fprintf(&b, "%s = %s\n", s.Name, widget.TOMLValue(s.Default))
 		}

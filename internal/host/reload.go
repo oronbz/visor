@@ -132,7 +132,7 @@ func (m Model) reloadConfig() (Model, []string, tea.Cmd) {
 
 func (m Model) layoutFile() string { return filepath.Join(m.opts.Paths.Config, layout.FileName) }
 
-func (m Model) pluginsDir() string { return filepath.Join(m.opts.Paths.Data, "plugins") }
+func (m Model) pluginsDir() string { return m.opts.Paths.Plugins() }
 
 // reloadLayout adopts the Layout another instance saved: the last writer
 // wins. Mid-arrangement it becomes what esc reverts to; a Layout that

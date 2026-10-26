@@ -61,6 +61,9 @@ type Options struct {
 	// BundleDir stands in for the directory visor is installed in, where it
 	// finds the Plugins it ships with; empty ships none.
 	BundleDir string
+	// Ports, when set, turns the fakes into the adapters the app runs on, so
+	// a test can swap in others, such as the demo's.
+	Ports func(fakes ports.Ports) ports.Ports
 }
 
 var DefaultNow = time.Date(2026, 10, 18, 14, 5, 9, 0, time.UTC)
@@ -148,6 +151,25 @@ func New(t testing.TB, o Options) *Host {
 		}
 		closeKeys = append(closeKeys, seq)
 	}
+	pp := ports.Ports{
+		Clock:      h.Clock,
+		Opener:     h.Opener,
+		Clipboard:  h.Clipboard,
+		Editor:     h.Editor,
+		Keyring:    h.Keyring,
+		Commands:   h.Commands,
+		Foreground: h.Foreground,
+		EventKit:   h.EventKit,
+		Machine:    h.Machine,
+		Watcher:    h.Watcher,
+		Inbox:      h.Inbox,
+		HTTP:       &http.Client{Timeout: 5 * time.Second},
+		Endpoints:  mergeEndpoints(ports.DefaultEndpoints(), o.Endpoints),
+		Getenv:     func(k string) string { return o.Env[k] },
+	}
+	if o.Ports != nil {
+		pp = o.Ports(pp)
+	}
 	m := host.New(host.Options{
 		CloseKeys:  closeKeys,
 		Paths:      h.Paths,
@@ -156,22 +178,7 @@ func New(t testing.TB, o Options) *Host {
 		Version:    o.Version,
 		BundleDir:  o.BundleDir,
 		Executable: o.Executable,
-		Ports: ports.Ports{
-			Clock:      h.Clock,
-			Opener:     h.Opener,
-			Clipboard:  h.Clipboard,
-			Editor:     h.Editor,
-			Keyring:    h.Keyring,
-			Commands:   h.Commands,
-			Foreground: h.Foreground,
-			EventKit:   h.EventKit,
-			Machine:    h.Machine,
-			Watcher:    h.Watcher,
-			Inbox:      h.Inbox,
-			HTTP:       &http.Client{Timeout: 5 * time.Second},
-			Endpoints:  mergeEndpoints(ports.DefaultEndpoints(), o.Endpoints),
-			Getenv:     func(k string) string { return o.Env[k] },
-		},
+		Ports:      pp,
 	})
 	h.model = m
 	t.Cleanup(func() {

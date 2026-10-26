@@ -29,7 +29,7 @@ const fetchTimeout = 5 * time.Minute
 
 func pluginManage(s System, pp ports.Ports, p paths.Paths, configFile string, locale config.Locale, editor func() config.Editor, args []string) int {
 	c := pluginCLI{s: s, in: bufio.NewReader(s.Stdin), installer: install.Installer{
-		Dir:     filepath.Join(p.Data, "plugins"),
+		Dir:     p.Plugins(),
 		Fetcher: githubFetcher(s.Getenv, pp),
 		Keyring: pp.Keyring,
 		Log:     s.Stderr,

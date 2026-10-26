@@ -48,10 +48,13 @@ type Registry struct {
 	// gone are stand-ins for the types of Plugins whose directories vanished.
 	gone      map[string]widget.Type
 	restarted []string
+	// env is added to the environment of every Plugin Discover finds.
+	env []string
 }
 
-func NewRegistry() *Registry {
-	return &Registry{plugins: map[string]*Plugin{}, gone: map[string]widget.Type{}}
+// NewRegistry adds env to the environment of every Plugin it discovers.
+func NewRegistry(env ...string) *Registry {
+	return &Registry{plugins: map[string]*Plugin{}, gone: map[string]widget.Type{}, env: env}
 }
 
 // Dirs are the directories under pluginsDir holding a manifest, then paths.
@@ -88,6 +91,7 @@ func (r *Registry) Discover(dirs []string, taken []string) ([]widget.Type, []str
 			continue
 		}
 		read[dir] = true
+		m.Env = r.env
 		file := filepath.Join(dir, ManifestFile)
 		if slices.Contains(names, m.Name) {
 			problems = append(problems, fmt.Sprintf("%s: another Plugin is already called `%s`", file, m.Name))

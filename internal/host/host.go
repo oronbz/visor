@@ -59,6 +59,9 @@ type Options struct {
 	// Executable is the path visor was launched by, before symlinks: what an
 	// Upgrade detects the install from and runs the new visor through.
 	Executable string
+	// PluginEnv is added to the environment of every installed and
+	// [[plugin]] path Plugin, which otherwise inherit visor's own.
+	PluginEnv []string
 }
 
 // Model is the root tea.Model. Its maps are shared by Model copies, so only
@@ -142,7 +145,7 @@ func New(o Options) Model {
 	m := Model{opts: o, now: o.Ports.Clock.Now(), widgets: map[string]placed{},
 		fetched: map[string]widget.Payload{}, lists: map[string]listState{},
 		sched: map[string]sched{}, paused: map[string]time.Time{}, cache: cacheStore(o), rng: newRand(o.Ports.Clock.Now()), timers: new(int),
-		closing: closekey.NewMatcher(o.CloseKeys), plugins: plugin.NewRegistry(), pushes: make(chan tea.Msg, 64), observed: map[string]observation{}, images: newImages()}
+		closing: closekey.NewMatcher(o.CloseKeys), plugins: plugin.NewRegistry(o.PluginEnv...), pushes: make(chan tea.Msg, 64), observed: map[string]observation{}, images: newImages()}
 	file := o.ConfigFile
 	if file == "" {
 		file = filepath.Join(o.Paths.Config, config.FileName)

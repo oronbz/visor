@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/oronbz/visor/internal/closekey"
 	"github.com/oronbz/visor/internal/config"
+	"github.com/oronbz/visor/internal/demo"
 	"github.com/oronbz/visor/internal/host"
 	"github.com/oronbz/visor/internal/paths"
 	"github.com/oronbz/visor/internal/ports"
@@ -45,9 +47,14 @@ type System struct {
 	Version string
 	// Exec replaces the process with path, after an Upgrade; nil is syscall.Exec.
 	Exec func(path string, args []string) error
+	// Notify relays signals to c, as signal.Notify does; nil is signal.Notify.
+	Notify func(c chan<- os.Signal, sig ...os.Signal)
 }
 
 const usage = `Usage: visor [--config <path>] [--close-key <keys>]... [--version]
+       visor demo [--close-key <keys>]...
+                             try the dashboard on made-up data, with no
+                             sign-in; nothing of yours is read or changed
        visor config default   print the full commented config reference
        visor config init      write the reference to the config path, once
        visor auth jira        set up Jira: site, email and an API token,
@@ -89,7 +96,14 @@ func Run(s System) int {
 	configFlag := fs.String("config", "", "path to config.toml")
 	var closeKeyFlags repeated
 	fs.Var(&closeKeyFlags, "close-key", "a key that quits visor, in herdr's key syntax")
-	if err := fs.Parse(s.Args); err != nil {
+	err := fs.Parse(s.Args)
+	args := fs.Args()
+	if err == nil && len(args) > 0 && args[0] == "demo" {
+		// The dashboard's flags may follow demo too.
+		err = fs.Parse(args[1:])
+		args = append([]string{"demo"}, fs.Args()...)
+	}
+	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -145,14 +159,28 @@ func Run(s System) int {
 		types, _ := host.Types(p, configFile, bundle, locale, s.Getenv)
 		return config.NewEditor(configFile, p.Data, types, locale)
 	}
-	if args := fs.Args(); len(args) > 0 && args[0] == "plugin" {
+	if len(args) > 0 && args[0] == "plugin" {
 		return pluginCommand(s, pp, p, configFile, locale, editor, args[1:])
 	}
-	if args := fs.Args(); len(args) > 0 && args[0] == "skills" {
+	if len(args) > 0 && args[0] == "skills" {
 		return skillsCommand(s, args[1:])
 	}
-	switch strings.Join(fs.Args(), " ") {
+	opts := host.Options{Paths: p, ConfigFile: configFile, Locale: locale, Ports: pp, CloseKeys: closeKeys,
+		BundleDir: bundle, Executable: s.Executable, Version: s.Version}
+	switch strings.Join(args, " ") {
 	case "":
+	case "demo":
+		d, err := demo.New(demo.Options{Now: pp.Clock.Now(), TempDir: s.Getenv("TMPDIR"), BundleDir: bundle, Plugins: p.Plugins(), Locale: locale})
+		if err != nil {
+			fmt.Fprintln(s.Stderr, "visor:", err)
+			return 1
+		}
+		defer d.Close()
+		// Printed before the TUI, they're there again once it quits.
+		for _, hint := range d.Hints {
+			fmt.Fprintln(s.Stderr, "visor demo:", hint)
+		}
+		opts.Paths, opts.ConfigFile, opts.Ports, opts.PluginEnv = d.Paths, "", d.Ports(pp), d.PluginEnv()
 	case "config default":
 		fmt.Fprint(s.Stdout, reference())
 		return 0
@@ -163,7 +191,7 @@ func Run(s System) int {
 	case "upgrade":
 		return upgradeCommand(s, pp, p, running)
 	default:
-		fmt.Fprintf(s.Stderr, "visor: unknown command %q\n\n%s", strings.Join(fs.Args(), " "), usage)
+		fmt.Fprintf(s.Stderr, "visor: unknown command %q\n\n%s", strings.Join(args, " "), usage)
 		return 2
 	}
 	// Popups have no HERDR_PANE_ID, and right-click can't reach them anyway.
@@ -172,8 +200,7 @@ func Run(s System) int {
 		// Deferred, so a crash or a signal that ends the program restores herdr's menu too.
 		defer herdrRightClick(s.Getenv, pp.Commands, "herdr")
 	}
-	restart, code := runTUI(s, pp, host.Options{Paths: p, ConfigFile: configFile, Locale: locale, Ports: pp, CloseKeys: closeKeys,
-		BundleDir: bundle, Executable: s.Executable, Version: s.Version})
+	restart, code := runTUI(s, opts)
 	if restart != "" {
 		reexec := s.Exec
 		if reexec == nil {
@@ -187,7 +214,7 @@ func Run(s System) int {
 
 // runTUI runs the dashboard until it quits, cleaning up after it, and
 // returns the path to run visor again through after an Upgrade, or "".
-func runTUI(s System, pp ports.Ports, o host.Options) (restart string, code int) {
+func runTUI(s System, o host.Options) (restart string, code int) {
 	m := host.New(o)
 	var opts []tea.ProgramOption
 	// Real files get Bubble Tea's defaults, which open /dev/tty when stdin is piped.
@@ -198,12 +225,14 @@ func runTUI(s System, pp ports.Ports, o host.Options) (restart string, code int)
 		opts = append(opts, tea.WithOutput(s.Stdout))
 	}
 	opts = append(opts, s.ProgramOptions...)
-	if c, ok := pp.Watcher.(io.Closer); ok {
+	if c, ok := o.Ports.Watcher.(io.Closer); ok {
 		defer c.Close()
 	}
 	// Every copy of the model shares its Plugins, so this stops them however the program ends.
 	defer m.Close()
-	final, err := tea.NewProgram(m, opts...).Run()
+	p := tea.NewProgram(m, opts...)
+	defer quitOnHangup(s, p)()
+	final, err := p.Run()
 	if err != nil {
 		fmt.Fprintln(s.Stderr, "visor:", err)
 		return "", 1
@@ -212,6 +241,29 @@ func runTUI(s System, pp ports.Ports, o host.Options) (restart string, code int)
 		restart = f.Restart()
 	}
 	return restart, 0
+}
+
+// quitOnHangup quits p on SIGHUP, which closing the terminal window sends,
+// as Bubble Tea quits on SIGTERM, so the deferred cleanup runs either way.
+// The returned func stops listening.
+func quitOnHangup(s System, p *tea.Program) (stop func()) {
+	notify := s.Notify
+	if notify == nil {
+		notify = signal.Notify
+	}
+	hup, done := make(chan os.Signal, 1), make(chan struct{})
+	notify(hup, syscall.SIGHUP)
+	go func() {
+		select {
+		case <-hup:
+			p.Quit()
+		case <-done:
+		}
+	}()
+	return func() {
+		signal.Stop(hup)
+		close(done)
+	}
 }
 
 // bundleDir is the directory visor is installed in: the real file's, since

@@ -76,6 +76,8 @@ visor checks GitHub for a new release every 12 hours. When one is out, it shows 
 
 ## Getting started
 
+To try it first, run `visor demo`: the dashboard on made-up data, with no sign-in needed.
+
 Run `visor`. With no config you get every default Widget; Script is opt-in through `ctrl+k`, Add Widget.
 
 - `ctrl+k` (or `:`, or a click on *^K actions* at the start of the footer) opens the Action palette: every Action, the Widgets' and visor's own, such as Add Widget and upgrade visor.
