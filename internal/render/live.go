@@ -90,7 +90,6 @@ func chart(th theme.Theme, c widget.Chart, w, rows int) []string {
 			cells[row][col] |= dots[3-d%4]
 		}
 	}
-	st := th.Fg(c.Token)
 	out := make([]string, rows)
 	for r, row := range cells {
 		var b strings.Builder
@@ -100,6 +99,11 @@ func chart(th theme.Theme, c widget.Chart, w, rows int) []string {
 			} else {
 				b.WriteRune(0x2800 + bits)
 			}
+		}
+		st := th.Fg(c.Token)
+		if len(c.Gradient) > 0 {
+			// Each row takes the gradient's colour at its middle, bottom up.
+			st = lipgloss.NewStyle().Foreground(th.Blend(c.Gradient, (float64(rows-r)-0.5)/float64(rows)))
 		}
 		out[r] = st.Render(b.String())
 	}

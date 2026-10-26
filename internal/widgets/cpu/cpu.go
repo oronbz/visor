@@ -64,7 +64,7 @@ func (m *meter) Refresh(_ context.Context, now time.Time) (widget.Payload, error
 			{Text: "cpu ", Token: theme.Dim},
 			{Text: fmt.Sprintf("%.0f%%", s.CPU*100), Token: level(s.CPU), Bold: true},
 		}},
-		{Chart: &widget.Chart{Values: samples, Token: theme.Accent}},
+		{Chart: &widget.Chart{Values: samples, Gradient: []theme.Token{theme.Ok, theme.Warn, theme.Bad}}},
 	}
 	lines = append(lines, bars(rs, width)...)
 	down, up := rates(last.Interfaces, s.Interfaces, now.Sub(lastAt).Seconds())

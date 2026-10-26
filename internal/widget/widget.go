@@ -365,6 +365,9 @@ type Chart struct {
 	// Rows is the chart's height; zero takes the rows the other lines leave.
 	Rows  int         `json:"rows,omitempty"`
 	Token theme.Token `json:"token"`
+	// Gradient, when set, colours the chart by height instead of Token: its
+	// tokens are blended from the bottom row to the top.
+	Gradient []theme.Token `json:"gradient,omitempty"`
 }
 
 // Digits is how big the host draws a line's text. Big digits cover 0-9,

@@ -272,4 +272,14 @@ func (t Theme) IsZero() bool { return t.colors[Bg] == nil }
 
 func (t Theme) Color(tok Token) color.Color { return t.colors[tok] }
 
+// Blend is the colour p of the way along toks, mixed between neighbours.
+func (t Theme) Blend(toks []Token, p float64) color.Color {
+	if len(toks) == 1 {
+		return t.colors[toks[0]]
+	}
+	at := min(max(p, 0), 1) * float64(len(toks)-1)
+	i := min(int(at), len(toks)-2)
+	return mix(t.colors[toks[i+1]], t.colors[toks[i]], at-float64(i))
+}
+
 func (t Theme) Fg(tok Token) lipgloss.Style { return lipgloss.NewStyle().Foreground(t.colors[tok]) }

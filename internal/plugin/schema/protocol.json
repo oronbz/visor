@@ -205,7 +205,8 @@
       "properties": {
         "values": { "type": "array", "items": { "type": "number", "minimum": 0, "maximum": 1 } },
         "rows": { "type": "integer", "minimum": 0 },
-        "token": { "$ref": "#/$defs/token" }
+        "token": { "$ref": "#/$defs/token" },
+        "gradient": { "description": "Colours the chart by height instead of token: the tokens are blended from the bottom row to the top.", "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/token" } }
       }
     },
     "column": {

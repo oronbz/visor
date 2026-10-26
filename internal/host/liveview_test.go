@@ -1,6 +1,7 @@
 package host_test
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -160,8 +161,14 @@ func TestSystemDrawsCPUHistoryAndMemoryBarWithFreeOfTotal(t *testing.T) {
 			t.Errorf("chart row %d has %q left of the samples", i, got)
 		}
 	}
-	if fg, _ := h.Fg(38, 4); fg != theme.Accent {
-		t.Errorf("chart drawn in %v, want accent", fg)
+	// The chart warms as it rises: ok at the bottom row, bad at the top.
+	th := h.Theme()
+	nearer := func(y int, want, other theme.Token) bool {
+		c := h.Cell(38, y).Style.Fg
+		return distance(c, th.Color(want)) < distance(c, th.Color(other))
+	}
+	if !nearer(5, theme.Ok, theme.Bad) || !nearer(2, theme.Bad, theme.Ok) {
+		t.Errorf("chart isn't ok at the bottom and bad at the top: bottom %v, top %v", h.Cell(38, 5).Style.Fg, h.Cell(38, 2).Style.Fg)
 	}
 
 	// Memory in binary units, the way RAM is sold: 65 GiB of 100 left.
@@ -300,4 +307,11 @@ func TestSystemDrawsDownloadAndUploadRatesSinceThePreviousRead(t *testing.T) {
 func cells(line string, x, n int) string {
 	r := []rune(line + strings.Repeat(" ", x+n))
 	return string(r[x : x+n])
+}
+
+func distance(a, b color.Color) float64 {
+	ar, ag, ab, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	d := func(x, y uint32) float64 { return (float64(x) - float64(y)) * (float64(x) - float64(y)) }
+	return d(ar, br) + d(ag, bg) + d(ab, bb)
 }
