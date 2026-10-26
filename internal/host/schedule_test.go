@@ -410,8 +410,8 @@ func TestFailureWithDataShowsItStaleWithReasonAndAgeAndTheFullErrorWhenFocused(t
 	}
 
 	h.Press("tab")
-	if footer := h.Line(9); !strings.Contains(footer, "network is unreachable") {
-		t.Errorf("footer %q, want the full error while the stale Widget is focused", footer)
+	if footer := h.Line(9); !strings.Contains(footer, "network is unreachable") || strings.Contains(footer, "^K") {
+		t.Errorf("footer %q, want only the full error while the stale Widget is focused", footer)
 	}
 
 	// Retries at 2m15s and 2m45s fail too; the one at 3m45s succeeds.

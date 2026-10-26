@@ -14,14 +14,17 @@ import (
 
 const footerHeight = 1
 
+// paletteHint leads the NORMAL hints, as text and as a click target.
+const paletteHint = "^K actions"
+
 func (m Model) footer() string {
 	th := m.opts.Theme
 	mode, modeColor := " NORMAL ", theme.Accent
 	bindings := normalBindings()
-	hints := "Tab/←→ focus · 1–9 jump · w widgets · ? keys · q quit"
+	hints := paletteHint + " · Tab/←→ focus · 1–9 jump · w widgets · ? keys · q quit"
 	hintTok := theme.Dim
 	if m.focus != "" {
-		hints = "Tab rows · ←→ widgets · Shift + ←↓↑→ any direction · m arrange · esc unfocus · ? keys"
+		hints = paletteHint + " · Tab rows · ←→ widgets · Shift + ←↓↑→ any direction · m arrange · esc unfocus · ? keys"
 		if e := m.staleError(m.focus); e != "" {
 			hints, hintTok = e, theme.Warn
 		}
@@ -76,6 +79,21 @@ func (m Model) footer() string {
 	}
 	line = ansi.Truncate(line, m.w-pw-1, "…")
 	return line + strings.Repeat(" ", m.w-ansi.StringWidth(line)-pw) + pill
+}
+
+// onPaletteHint reports whether cell x, y is the footer's whole ^K actions
+// hint, which is drawn only in NORMAL mode and not when cut by the width.
+func (m Model) onPaletteHint(x, y int) bool {
+	if y != m.h-footerHeight {
+		return false
+	}
+	plain := ansi.Strip(m.footer())
+	i := strings.Index(plain, paletteHint+" · ")
+	if i < 0 {
+		return false
+	}
+	from := ansi.StringWidth(plain[:i])
+	return x >= from && x < from+ansi.StringWidth(paletteHint)
 }
 
 func modifierHints(name string, bindings []key.Binding, uses func(key string) bool) string {

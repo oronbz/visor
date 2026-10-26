@@ -17,7 +17,7 @@ func TestMeetingsIsBuiltInOnMacOSOnly(t *testing.T) {
 
 	h.Press("ctrl+k")
 	h.Type("add meetings")
-	if got := slices.Contains(paletteEntries(h), "Dashboard add Meetings Widget"); got != mac {
+	if got := slices.Contains(paletteEntries(h), "visor add Meetings Widget"); got != mac {
 		t.Errorf("Add Widget offers Meetings = %v on %s: %q", got, runtime.GOOS, paletteEntries(h))
 	}
 }
@@ -31,7 +31,7 @@ func TestRemindersIsBuiltInOnMacOSOnly(t *testing.T) {
 
 	h.Press("ctrl+k")
 	h.Type("add reminders")
-	if got := slices.Contains(paletteEntries(h), "Dashboard add Reminders Widget"); got != mac {
+	if got := slices.Contains(paletteEntries(h), "visor add Reminders Widget"); got != mac {
 		t.Errorf("Add Widget offers Reminders = %v on %s: %q", got, runtime.GOOS, paletteEntries(h))
 	}
 }

@@ -34,7 +34,7 @@ var keys = keyMap{
 	Widgets:   key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "show or hide Widgets")),
 	Jump:      key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"), key.WithHelp("1–9", "jump to the Nth Widget")),
 	Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "key map")),
-	Palette:   key.NewBinding(key.WithKeys("ctrl+k", ":"), key.WithHelp("^K :", "Action palette: every Widget's Actions")),
+	Palette:   key.NewBinding(key.WithKeys("ctrl+k", ":"), key.WithHelp("^K :", "every Action, the Widgets' and visor's own")),
 	Refresh:   key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("^R", "refresh every Widget now")),
 	// Upgrade isn't a host key: a focused Widget's own U Action wins.
 	Upgrade: key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "upgrade visor, while a new release is out")),

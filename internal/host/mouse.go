@@ -63,6 +63,8 @@ func (m Model) mouseMsg(msg tea.MouseMsg) (Model, tea.Cmd) {
 		switch {
 		case ms.Button == tea.MouseLeft && m.onPill(ms.X, ms.Y):
 			return m.askUpgrade()
+		case ms.Button == tea.MouseLeft && m.onPaletteHint(ms.X, ms.Y):
+			m.palette = &palette{}
 		case !hit:
 		case ms.Button == tea.MouseLeft:
 			return m.press(s, z, ms.X, ms.Y)

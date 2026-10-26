@@ -147,6 +147,9 @@ func TestTheUpgradePillSitsAtTheFootersRightEdgeAtEveryWidth(t *testing.T) {
 				t.Errorf("at %d columns pill cell %d has background %v, want accent", w, i, bg)
 			}
 		}
+		if w >= 80 && !strings.HasPrefix(footer, " NORMAL  ^K actions · ") {
+			t.Errorf("at %d columns the footer is %q, want the palette hint kept beside the pill", w, footer)
+		}
 		if w == 64 && !strings.Contains(footer, "…") {
 			t.Errorf("at %d columns the footer is %q, want the hints cut with … before the pill", w, footer)
 		}

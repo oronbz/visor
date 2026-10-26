@@ -10,8 +10,8 @@ import (
 	"github.com/oronbz/visor/internal/widget"
 )
 
-// dashboard is the palette title of Actions that belong to no Widget.
-const dashboard = "Dashboard"
+// visorTitle is the palette title of visor's own Actions, which belong to no Widget.
+const visorTitle = "visor"
 
 // configEditedMsg reports a host Action's config.toml edit, made off the UI thread.
 type configEditedMsg struct {
@@ -29,7 +29,7 @@ func (m Model) addEntries() []entry {
 	var es []entry
 	for _, t := range m.configEditor.Types {
 		a := bound{Action: widget.Action{ID: "add", Label: "add " + t.Title + " Widget"}, by: addWidget, typ: t.Name}
-		es = append(es, entry{title: dashboard, action: a})
+		es = append(es, entry{title: visorTitle, action: a})
 	}
 	return es
 }

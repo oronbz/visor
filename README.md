@@ -77,7 +77,8 @@ visor checks GitHub for a new release every 12 hours. When one is out, it shows 
 
 Run `visor`. With no config you get every default Widget; Script is opt-in through `ctrl+k`, Add Widget.
 
-- `?` shows every key, `ctrl+k` opens the Action palette, `q` quits.
+- `ctrl+k` (or `:`, or a click on *^K actions* at the start of the footer) opens the Action palette: every Action, the Widgets' and visor's own, such as Add Widget and upgrade visor.
+- `?` shows every key, `q` quits.
 - A Widget that needs a sign-in or a setting shows *needs setup* and how to fix it. GitHub uses your `gh` login; Jira uses `visor auth jira`.
 
 ## Agent skills

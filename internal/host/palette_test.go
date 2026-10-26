@@ -126,7 +126,7 @@ func TestThePaletteMovesItsSelectionAndAsksBeforeAConfirmedAction(t *testing.T) 
 	h, _, todoRan := mailAndTodo(t, mailbox(), todo)
 
 	h.Press("ctrl+k")
-	// The palette shows its first 12 entries; the Dashboard's Add Widget ones follow.
+	// The palette shows its first 12 entries; visor's own Add Widget ones follow.
 	want := "Mail archive a / Mail compose c / Mail refresh / Mail hide / Mail edit settings / Mail remove / " +
 		"Todo sync s / Todo purge p / Todo refresh / Todo hide / Todo edit settings / Todo remove"
 	if got := strings.Join(paletteEntries(h), " / "); got != want {
@@ -235,5 +235,15 @@ func TestHideFromThePaletteHidesTheWidgetAndRecordsIt(t *testing.T) {
 	}
 	if !slices.Equal(saved.Hidden, []string{"todo"}) {
 		t.Errorf("saved hidden %v, want [todo]", saved.Hidden)
+	}
+}
+
+func TestVisorsOwnActionsAreTitledVisorInThePalette(t *testing.T) {
+	h := hosttest.New(t, hosttest.Options{Width: 120, Height: 30})
+
+	h.Press("ctrl+k")
+	h.Type("agent skills")
+	if got := paletteEntries(h); !slices.Contains(got, "visor install agent skills") {
+		t.Errorf("palette entries %q, want install agent skills under visor", got)
 	}
 }

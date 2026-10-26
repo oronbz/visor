@@ -397,3 +397,32 @@ func TestDraggingATitleOntoEachSideOfAWidgetRearrangesAndWritesTheLayout(t *test
 		})
 	}
 }
+
+func TestClickingThePaletteHintOpensThePalette(t *testing.T) {
+	h := hosttest.New(t, hosttest.Options{Width: 80, Height: 21})
+	x, y, ok := h.Find("^K actions")
+	if !ok || y != 20 {
+		t.Fatalf("no ^K actions hint in the footer:\n%s", h.Screen())
+	}
+
+	h.Click(x+len("^K actions")+3, y)
+	if strings.Contains(h.Line(20), "type to filter") {
+		t.Fatalf("a click on the footer past the hint opened the palette:\n%s", h.Screen())
+	}
+
+	h.Click(x+3, y)
+	if !strings.Contains(h.Line(20), "type to filter") {
+		t.Errorf("a click on the ^K actions hint left the footer at %q, want the palette open", h.Line(20))
+	}
+}
+
+func TestClickingWhereThePaletteHintWouldBeDoesNothingInOtherModes(t *testing.T) {
+	h := hosttest.New(t, hosttest.Options{Width: 80, Height: 21})
+	x, y, _ := h.Find("^K actions")
+
+	h.Press("w")
+	h.Click(x+3, y)
+	if strings.Contains(h.Line(20), "type to filter") {
+		t.Errorf("a click on the Widget picker's footer opened the palette:\n%s", h.Screen())
+	}
+}

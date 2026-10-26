@@ -70,3 +70,12 @@ func squeeze(s string) string {
 	}
 	return s
 }
+
+func TestTheKeyMapNamesThePaletteAsEveryAction(t *testing.T) {
+	h := hosttest.New(t, hosttest.Options{Width: 100, Height: 40})
+
+	h.Press("?")
+	if want := "^K :  every Action, the Widgets' and visor's own"; !strings.Contains(squeeze(h.Screen()), want) {
+		t.Errorf("key map lacks %q:\n%s", want, h.Screen())
+	}
+}

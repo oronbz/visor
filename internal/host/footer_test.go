@@ -85,7 +85,7 @@ func TestModifiedKeysActNormallyAndLeaveTheFooterUnmodified(t *testing.T) {
 	if got := focused(t, h, phoneticTitles); got != "Alpha" {
 		t.Errorf("shift+K focuses %q, want Alpha above", got)
 	}
-	if !strings.Contains(footer(), "esc unfocus") {
+	if !strings.Contains(footer(), "Tab rows") {
 		t.Errorf("footer after shift+K %q, want the focused hints", footer())
 	}
 	h.Release("K", "leftshift")
@@ -95,7 +95,21 @@ func TestModifiedKeysActNormallyAndLeaveTheFooterUnmodified(t *testing.T) {
 		t.Errorf("ctrl+j moved focus to %q", got)
 	}
 	h.Release("ctrl+j")
-	if !strings.Contains(footer(), "esc unfocus") {
+	if !strings.Contains(footer(), "Tab rows") {
 		t.Errorf("footer after ctrl+j %q, want the focused hints", footer())
+	}
+}
+
+func TestTheNormalFooterLeadsWithThePaletteKeyAtEveryWidth(t *testing.T) {
+	for _, w := range []int{140, 80, 64} {
+		h := hosttest.New(t, hosttest.Options{Width: w, Height: 21})
+
+		if footer := h.Line(20); !strings.HasPrefix(footer, " NORMAL  ^K actions · Tab/←→ focus") {
+			t.Errorf("at %d columns the unfocused footer is %q, want ^K actions first", w, footer)
+		}
+		h.Press("tab")
+		if footer := h.Line(20); !strings.HasPrefix(footer, " NORMAL  ^K actions · Tab rows") {
+			t.Errorf("at %d columns the focused footer is %q, want ^K actions first", w, footer)
+		}
 	}
 }

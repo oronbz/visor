@@ -18,7 +18,9 @@
 
 **Summary**: Lines a list Widget pins above its Items, such as headline numbers, a chart or a bar, so one Widget can show both. They stay put while the Items scroll. It isn't called a header because Group headers already exist.
 
-**Action**: Something the user can do, either to an Item (open, approve, complete) or to a whole Widget (add a task, change the calendar month, edit the note). Some Actions ask for confirmation before they run because they can't be taken back. The user can add their own to any Widget in its `[[widget]]` block: commands visor runs itself, filled from the selected Item's values.
+**Action**: Something the user can do, either to an Item (open, approve, complete), to a whole Widget (add a task, change the calendar month, edit the note), or to visor itself (add a Widget, upgrade visor). Some Actions ask for confirmation before they run because they can't be taken back. The user can add their own to any Widget in its `[[widget]]` block: commands visor runs itself, filled from the selected Item's values.
+
+**Action palette**: The one searchable list of every Action visor offers right now: each visible Widget's and visor's own.
 
 **Layout**: The saved arrangement and sizes of Widgets on the dashboard, including which Widgets are hidden. Hiding a Widget changes only the Layout; removing a Widget takes it off the dashboard.
 

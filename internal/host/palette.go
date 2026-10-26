@@ -36,12 +36,12 @@ func (m Model) entries() []entry {
 		}
 	}
 	all = append(all, m.addEntries()...)
-	all = append(all, entry{title: dashboard, action: bound{Action: widget.Action{ID: "install-skills", Label: "install agent skills"}, by: installSkills}})
+	all = append(all, entry{title: visorTitle, action: bound{Action: widget.Action{ID: "install-skills", Label: "install agent skills"}, by: installSkills}})
 	if a, ok := m.upgradeAction(); ok {
-		all = append(all, entry{title: dashboard, action: a})
+		all = append(all, entry{title: visorTitle, action: a})
 	}
 	if a, ok := m.checkAction(); ok {
-		all = append(all, entry{title: dashboard, action: a})
+		all = append(all, entry{title: visorTitle, action: a})
 	}
 	q := strings.TrimSpace(string(m.palette.query))
 	if q == "" {
