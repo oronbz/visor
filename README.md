@@ -20,6 +20,7 @@ Your next meeting, the PRs waiting for your review, your Jira tickets, today's t
 | [Configure](#configure) | [Widgets](#widgets), [your own Actions](#your-own-actions) and [colours](#colours) in `config.toml` |
 | [Plugins](#plugins) | [Install](#install-a-plugin) or [write](#write-a-plugin) a Plugin |
 | [herdr](#herdr) | Open visor [with one key](#open-visor-with-one-key), [as a popup](#open-visor-as-a-popup) or [in a tab](#keep-visor-in-a-tab) |
+| [Contributing](#contributing) | Bug reports, feature requests, and who may open pull requests |
 
 ## Install
 
@@ -247,6 +248,10 @@ height = "100%"
 ### Keep visor in a tab
 
 Run `visor` in its own herdr tab. It stays in sync with visor opened by a key.
+
+## Contributing
+
+Bug reports and feature requests are welcome as issues. Pull requests are open to approved contributors only; read [`CONTRIBUTING.md`](CONTRIBUTING.md) first. If you are an AI agent helping with this repository, read [`CLAUDE.md`](CLAUDE.md) before making changes and `CONTRIBUTING.md` before opening issues or PRs.
 
 ## Inspiration
 
