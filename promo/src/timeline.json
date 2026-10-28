@@ -1,33 +1,40 @@
 {
   "fps": 30,
-  "duration": 74.5,
+  "duration": 83.5,
   "bpm": 120,
   "scenes": {
     "hook": [0, 6],
     "title": [6, 9],
-    "open": [9, 13],
-    "approve": [13, 18],
-    "jira": [18, 22.5],
-    "mouse": [22.5, 33.5],
-    "ask": [33.5, 36],
-    "configure": [36, 50],
-    "plugin": [50, 64],
-    "shai": [64, 68],
-    "end": [68, 74.5]
+    "run": [9, 14],
+    "herdr": [14, 22],
+    "approve": [22, 27],
+    "jira": [27, 31.5],
+    "mouse": [31.5, 42.5],
+    "ask": [42.5, 45],
+    "configure": [45, 59],
+    "plugin": [59, 73],
+    "shai": [73, 77],
+    "end": [77, 83.5]
   },
   "cues": {
     "hookWords": [0.5, 1.25, 2.0, 2.75],
     "reveal": 3.5,
-    "keyOpen": 10.0,
-    "confirm": [14.5, 16.3],
-    "transition": [18.8, 21.3],
-    "drags": [23.2, 27.8, 30.2, 32.2],
+    "confirm": [23.5, 25.3],
+    "transition": [27.8, 30.3],
+    "drags": [32.2, 36.8, 39.2, 41.2],
     "agentTyping": 6,
     "agentWait": 2,
-    "configureTyping": [36, 42],
-    "configureFlip": 46,
-    "pluginTyping": [50, 56],
-    "pluginAppears": 60,
-    "endTyping": { "start": 69.2, "perChar": 0.045, "lines": ["brew install oronbz/tap/visor", "visor demo"] }
+    "configureTyping": [45, 51],
+    "configureFlip": 55,
+    "pluginTyping": [59, 65],
+    "pluginAppears": 69,
+    "endTyping": {
+      "start": 78.2,
+      "perChar": 0.045,
+      "lines": ["brew install oronbz/tap/visor", "visor demo"]
+    },
+    "runTyping": [9.7, 10.4],
+    "runEnter": 10.9,
+    "herdrKeys": [15.15, 21.0]
   }
 }

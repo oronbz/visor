@@ -13,4 +13,8 @@ cut mouse-7.mp4 mouse.mp4 26
 # Claude Code's usage-limit banner shows until the prompt is typed.
 cut configure-3.mp4 configure.mp4 40 "drawbox=x=280:y=962:w=1630:h=32:color=0x23222e:t=fill:enable='lt(t,5.75)'"
 cut plugin-1.mp4 plugin.mp4 58
+# These two were shot when the screen was shorter, so they're letterboxed to 16:9.
+fit="scale=1920:-2,pad=1920:1080:0:(oh-ih)/2:color=0x23222e"
+cut plain.mp4 plain.mp4 10 "$fit"
+cut herdr.mp4 herdr.mp4 12 "$fit"
 cp "$HOME/Developer/visor/docs/media/shai-mishali.jpg" "$out/shai.jpg"

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AbsoluteFill, Easing, Img, interpolate, Sequence, staticFile } from 'remotion';
-import { Caption, Flash, Speed, WidgetBox } from './ui';
+import { Caption, Flash, KeyCaps, Speed, WidgetBox } from './ui';
 import { FULL, Take, View } from './Take';
 import { color, font } from './theme';
 import { C, ramp, S, T, useAbs } from './time';
@@ -17,6 +17,8 @@ const WIDGETS = ROWS.flatMap(([top, bottom, cells]) =>
   cells.map(([title, l, r]) => [title, (l - 1) * K, (top - 1) * K, (r - l + 2) * K, (bottom - top + 2) * K] as const),
 );
 
+// The plain terminal's prompt, where `visor` is typed.
+const SHELL: View = { cx: 360, cy: 263, w: 720 };
 const PROMPT: View = { cx: 760, cy: 800, w: 1100 };
 const REVIEW: View = { cx: 1450, cy: 706, w: 1000 };
 // Review requests with the Approve? popup that opens above it.
@@ -118,14 +120,33 @@ export const Title = () => {
   );
 };
 
-export const Open = () => {
-  const t = useAbs('open');
+export const Run = () => {
+  const t = useAbs('run');
+  const [a, b] = S.run;
   return (
     <AbsoluteFill>
-      <Take src="keys.mp4" cuts={[{ from: 0.3, len: S.open[1] - S.open[0] }]} />
-      <Flash t={t} at={C.keyOpen} strength={0.25} />
-      <Caption t={t} a={S.open[0] + 0.15} b={S.open[1]} title="herdr">
-        One key opens it over any tab.
+      <Take src="plain.mp4" cuts={[{ from: 1.5, len: b - a, cam: [[0, SHELL], [2.0, SHELL], [2.8, FULL]] }]} />
+      <Caption t={t} a={a + 2.4} b={b} title="any terminal">
+        Run visor in any terminal.
+      </Caption>
+    </AbsoluteFill>
+  );
+};
+
+export const Herdr = () => {
+  const t = useAbs('herdr');
+  const [a, b] = S.herdr;
+  const [open, close] = C.herdrKeys;
+  return (
+    <AbsoluteFill>
+      <Take src="herdr.mp4" cuts={[{ from: 1.2, len: b - a }]} />
+      <KeyCaps t={t} at={open} keys={['⌘', '⇧', 'G']} />
+      <KeyCaps t={t} at={close} keys={['⌘', '⇧', 'G']} />
+      <Caption t={t} a={a + 0.2} b={close - 0.5} title="herdr plugin">
+        In herdr, one key opens it over any tab.
+      </Caption>
+      <Caption t={t} a={close - 0.3} b={b} title="herdr plugin">
+        The same key puts it away.
       </Caption>
     </AbsoluteFill>
   );

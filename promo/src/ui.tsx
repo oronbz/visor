@@ -127,3 +127,39 @@ export const Flash: React.FC<{ t: number; at: number; strength?: number }> = ({ 
 export const Vignette = () => (
   <AbsoluteFill style={{ pointerEvents: 'none', background: 'radial-gradient(ellipse 80% 75% at 50% 50%, transparent 60%, rgba(0,0,0,0.45) 100%)' }} />
 );
+
+/** Keycaps that come up just before `at`, go down on it, and leave after. */
+export const KeyCaps: React.FC<{ t: number; at: number; keys: string[] }> = ({ t, at, keys }) => {
+  const o = Math.min(ramp(t, at - 0.7, at - 0.45, Easing.out(Easing.back(1.8))), 1 - ramp(t, at + 0.9, at + 1.2));
+  if (o <= 0) return null;
+  const down = t >= at && t < at + 0.22;
+  return (
+    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', gap: 26, opacity: o, transform: `scale(${0.85 + 0.15 * o})` }}>
+        {keys.map((k) => (
+          <div
+            key={k}
+            style={{
+              width: 150,
+              height: 150,
+              borderRadius: 26,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: font.sans,
+              fontWeight: 700,
+              fontSize: 78,
+              color: down ? color.bg : color.bright,
+              background: down ? color.accent : 'rgba(34,42,54,0.95)',
+              border: `3px solid ${down ? color.accent : color.line}`,
+              boxShadow: down ? '0 4px 0 #3f63d8, 0 10px 40px rgba(138,169,255,0.45)' : '0 12px 0 #0b0e12, 0 30px 60px rgba(0,0,0,0.55)',
+              transform: `translateY(${down ? 8 : 0}px)`,
+            }}
+          >
+            {k}
+          </div>
+        ))}
+      </div>
+    </AbsoluteFill>
+  );
+};

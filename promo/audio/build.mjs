@@ -253,14 +253,16 @@ riser(C.reveal, S.title[0], 0.35);
 riser(S.configure[0] - 2.5, S.configure[0], 0.4);
 for (const t of [S.title[0], S.configure[0], S.end[0]]) impact(t, 0.7);
 for (const t of [C.configureFlip, C.pluginAppears]) impact(t, 0.45);
-for (const t of [S.open[0], S.mouse[0], S.ask[0], S.plugin[0], S.shai[0]]) whoosh(t, 0.15);
+for (const t of [S.run[0], S.herdr[0], S.mouse[0], S.ask[0], S.plugin[0], S.shai[0]]) whoosh(t, 0.15);
 const [, last] = CHORDS[0];
 pad(S.end[0], S.end[1] - S.end[0], [...last, up(last[0])], 0.09, 2000);
 bass(S.end[0], 'A1', 3, 0.35);
 for (let k = 0; k < 6; k++) pluck(S.end[0] + k * BEAT, up([...last, up(last[0])][ARP[k]]), 0.06 * (1 - k / 7), 3000, k % 2 ? 0.3 : -0.3);
 
 // Sound effects.
-key(C.keyOpen, 0.6);
+for (const t of C.herdrKeys) key(t, 0.6);
+typing(...C.runTyping, 7, 0.3);
+key(C.runEnter, 0.5);
 for (const t of C.confirm) key(t, 0.55);
 for (const t of C.transition) key(t, 0.55);
 for (const t of C.drags) key(t, 0.35);

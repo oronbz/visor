@@ -1,13 +1,14 @@
 import React from 'react';
 import { AbsoluteFill, Audio, Sequence, staticFile } from 'remotion';
-import { Approve, Ask, Configure, End, Hook, Jira, Mouse, Open, Plugin, Shai, Title } from './scenes';
+import { Approve, Ask, Configure, End, Herdr, Hook, Jira, Mouse, Plugin, Run, Shai, Title } from './scenes';
 import { Vignette } from './ui';
 import { S, T } from './time';
 
 const SCENES: [keyof typeof S, React.FC][] = [
   ['hook', Hook],
   ['title', Title],
-  ['open', Open],
+  ['run', Run],
+  ['herdr', Herdr],
   ['approve', Approve],
   ['jira', Jira],
   ['mouse', Mouse],
