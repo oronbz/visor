@@ -1,0 +1,31 @@
+{
+  "fps": 30,
+  "duration": 50.5,
+  "bpm": 120,
+  "scenes": {
+    "hook": [0, 4.5],
+    "title": [4.5, 7],
+    "open": [7, 10],
+    "approve": [10, 13.5],
+    "jira": [13.5, 17],
+    "mouse": [17, 22],
+    "ask": [22, 24],
+    "configure": [24, 32.5],
+    "plugin": [32.5, 41],
+    "shai": [41, 44.5],
+    "end": [44.5, 50.5]
+  },
+  "cues": {
+    "hookWords": [0.5, 1.0, 1.5, 2.0],
+    "reveal": 2.5,
+    "keyOpen": 8.0,
+    "confirm": [11.1, 12.9],
+    "transition": [13.9, 16.4],
+    "drags": [17.3, 18.6, 20.7],
+    "configureTyping": [24, 26],
+    "configureFlip": 30,
+    "pluginTyping": [32.5, 34.5],
+    "pluginAppears": 38.5,
+    "endTyping": { "start": 45.6, "perChar": 0.035, "lines": ["brew install oronbz/tap/visor", "visor demo"] }
+  }
+}
