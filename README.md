@@ -1,24 +1,67 @@
+<div align="center">
+
 # visor
 
-**A heads-up display for your terminal.**
+**A heads-up display for your terminal.** Your coding agent sets it up.
 
-![visor: clock, calendar, meetings, tasks, reminders, notes, CPU, memory, disk and network, GitHub review requests, Jira issues and the weather in one terminal dashboard](docs/screenshot.png)
+[![Latest release](https://img.shields.io/github/v/release/oronbz/visor?color=8aa9ff)](https://github.com/oronbz/visor/releases/latest) [![License: MIT](https://img.shields.io/github/license/oronbz/visor?color=8aa9ff)](LICENSE) [![herdr plugin](https://img.shields.io/badge/herdr-plugin-8aa9ff)](#herdr)
 
-Your next meeting, the PRs waiting for your review, your Jira tickets, today's tasks and reminders, and the weather on one screen. Act on them right there: approve a PR, move a ticket, check off a task, open a meeting.
+![visor opens over a herdr tab with one key: approve a pull request, move a Jira issue to In Review, search the action palette, then the same key closes it](docs/media/visor.gif)
 
-- **Your agent sets it up.** Tell Claude Code, Codex or Cursor what you want, and visor's [skills](#agent-skills) turn it into Widgets, Actions or a new Plugin.
+</div>
+
+Your next meeting, the PRs waiting for your review, your Jira tickets, today's tasks and reminders, what's playing and the weather on one screen. Act on them right there: approve a PR, move a ticket, check off a task, open a meeting.
+
+Try it on a made-up workday, with no sign-in and nothing of yours read or changed:
+
+```sh
+brew install oronbz/tap/visor
+visor demo
+```
+
+- **Your agent sets it up.** Tell Claude Code, Codex or Cursor what you want, and visor's [skills](#agent-skills) turn it into Widgets, Actions, colours or a new Plugin.
 - **Make it yours.** Move, resize and hide Widgets with the mouse or vim keys.
 - **Works with your tools.** GitHub, Jira, macOS Calendar and Reminders, any shell command, and Plugins in any language.
 - **One key away.** Open it over your tab in [herdr](https://herdr.dev) and close it with the same key.
 - **Nothing to host.** One app on your machine; tokens stay in your system keyring.
 
+## Agent skills
+
+visor is built to be set up by your coding agent. Install the skills, then ask for what you want.
+
+```sh
+visor skills install
+```
+
+> give my visor a warm sunset palette, and add a widget counting down to Friday's 16:00 release
+
+![Claude Code, below visor in a herdr tab, changes the colours and adds a Release countdown Widget in 24 seconds; visor reloads and shows both](docs/media/agent-configure.gif)
+
+> make me a visor plugin that shows the Hacker News front page, and add it to my visor
+
+![Claude Code writes a Hacker News Plugin, checks it with visor plugin check and adds it; the new Widget appears in visor with the live front page](docs/media/agent-plugin.gif)
+
+- `visor-configure` edits your config, Widgets, Actions, colours and herdr keybinds.
+- `visor-make-plugin` writes a Plugin with you and tests it.
+
+They go to `~/.agents/skills/`, linked into `~/.claude/skills/` for Claude Code, and visor keeps them in step with its version. With the [skills](https://github.com/vercel-labs/skills) CLI instead, pin your version:
+
+```sh
+npx skills add oronbz/visor#vX.Y.Z -g
+```
+
+## Made with visor
+
+![Shai Mishali's visor: his priorities, agents, review requests, meetings and Spotify, with Widgets for his Bambu Lab printer, disk space and tokens used](docs/media/shai-mishali.jpg)
+
+Shai Mishali's visor, with Plugins he made for Spotify and his Bambu Lab printer.
+
 | | |
 |---|---|
 | [Install](#install) | Homebrew, Linux packages, Windows, from source, and [updating](#update) |
 | [Getting started](#getting-started) | The default Widgets, the keys, and signing in |
-| [Agent skills](#agent-skills) | Let your coding agent configure visor or write a Plugin |
 | [Configure](#configure) | [Widgets](#widgets), [your own Actions](#your-own-actions) and [colours](#colours) in `config.toml` |
-| [Plugins](#plugins) | [Install](#install-a-plugin) or [write](#write-a-plugin) a Plugin |
+| [Plugins](#plugins) | [Official Plugins](#official-plugins), [install](#install-a-plugin) or [write](#write-a-plugin) one |
 | [herdr](#herdr) | Open visor [with one key](#open-visor-with-one-key), [as a popup](#open-visor-as-a-popup) or [in a tab](#keep-visor-in-a-tab) |
 | [Contributing](#contributing) | Bug reports, feature requests, and who may open pull requests |
 
@@ -76,30 +119,14 @@ visor checks GitHub for a new release every 12 hours. When one is out, it shows 
 
 ## Getting started
 
-To try it first, run `visor demo`: the dashboard on made-up data, with no sign-in needed.
-
 Run `visor`. With no config you get every default Widget; Script is opt-in through `ctrl+k`, Add Widget.
 
 - `ctrl+k` (or `:`, or a click on *^K actions* at the start of the footer) opens the Action palette: every Action, the Widgets' and visor's own, such as Add Widget and upgrade visor.
 - `?` shows every key, `q` quits.
 - A Widget that needs a sign-in or a setting shows *needs setup* and how to fix it. GitHub uses your `gh` login; Jira uses `visor auth jira`.
+- Drag a Widget by its title to move it, drag a border to resize it, and right-click an Item for its Actions. `m` moves and resizes with vim keys.
 
-## Agent skills
-
-visor is built to be set up by your coding agent. Install the skills, then ask for what you want: "add a Widget for my team's Jira sprint", "give my PRs Widget a key that checks out the branch", "make a Widget for our deploys".
-
-```sh
-visor skills install
-```
-
-- `visor-configure` edits your config, Widgets, Actions and herdr keybinds.
-- `visor-make-plugin` writes a Plugin with you and tests it.
-
-They go to `~/.agents/skills/`, linked into `~/.claude/skills/` for Claude Code, and visor keeps them in step with its version. With the [skills](https://github.com/vercel-labs/skills) CLI instead, pin your version:
-
-```sh
-npx skills add oronbz/visor#vX.Y.Z -g
-```
+![Dragging Weather to the front of its row, resizing Jira by its border, then right-clicking a PR and approving it](docs/media/arrange.gif)
 
 ## Configure
 
@@ -156,10 +183,20 @@ accent = "#3f63d8"
 
 A Plugin is any program that adds Widget types, speaking JSON-RPC over stdio. Weather ships as one.
 
+### Official Plugins
+
+| Plugin | What it shows |
+|---|---|
+| `nowplaying` | What your Mac or Linux desktop is playing, with play/pause, next, previous and seek |
+| `stocks` | Stock, index, fund and crypto quotes from Yahoo Finance, with a chart of one of them |
+| `bitrise` | The latest builds of the Bitrise apps you watch |
+
+They live in [oronbz/visor-plugins](https://github.com/oronbz/visor-plugins).
+
 ### Install a Plugin
 
 ```sh
-visor plugin install bitrise               # official, from oronbz/visor-plugins
+visor plugin install nowplaying            # official, from oronbz/visor-plugins
 visor plugin install owner/repo            # or owner/repo/subdir, --ref <tag or branch>
 visor plugin list
 visor plugin update [name...]
@@ -254,6 +291,10 @@ Run `visor` in its own herdr tab. It stays in sync with visor opened by a key.
 ## Contributing
 
 Bug reports and feature requests are welcome as issues. Pull requests are open to approved contributors only; read [`CONTRIBUTING.md`](CONTRIBUTING.md) first. If you are an AI agent helping with this repository, read [`CLAUDE.md`](CLAUDE.md) before making changes and `CONTRIBUTING.md` before opening issues or PRs.
+
+## Like it?
+
+If visor earns a place on your screen, a star on GitHub helps other people find it.
 
 ## Inspiration
 
