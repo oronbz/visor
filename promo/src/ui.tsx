@@ -113,7 +113,7 @@ export const Speed: React.FC<{ t: number; a: number; b: number; rate: number }> 
         fontSize: 34,
       }}
     >
-      ▶▶ {Math.round(rate)}×
+      ▶▶ {rate < 3 ? rate.toFixed(1).replace(/\.0$/, '') : Math.round(rate)}×
     </div>
   );
 };

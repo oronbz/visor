@@ -104,7 +104,7 @@ function saw(f, dur, detunes = [0]) {
   return o;
 }
 
-// Sections: where the beat plays, and how open the filter is.
+// Sections: the beat plays in the drops, the outro holds one chord.
 const DROPS = [[S.title[0], S.ask[0]], [S.configure[0], S.end[0]]];
 const inDrop = (t) => DROPS.some(([a, b]) => t >= a && t < b);
 const CHORDS = [
@@ -114,13 +114,13 @@ const CHORDS = [
   ['G1', ['G3', 'B3', 'D4']],
 ];
 const up = (name) => name.replace(/\d/, (d) => String(Number(d) + 1));
-const chordAt = (t) => CHORDS[Math.floor(t / BAR) % CHORDS.length];
+const chordAt = (t) => CHORDS[Math.floor(t / BAR + 1e-6) % CHORDS.length];
 
-/** The pump every drum hit puts on the music, as a kick-driven sidechain would. */
+/** The duck the kick puts on the music, as a sidechain would. */
 const pumpAt = (t) => {
   if (!inDrop(t)) return 1;
   const p = (t % BEAT) / BEAT;
-  return 0.35 + 0.65 * Math.min(1, p / 0.45) ** 1.6;
+  return 0.45 + 0.55 * Math.min(1, p / 0.4) ** 1.5;
 };
 
 function kick(t0, amp) {
@@ -138,7 +138,7 @@ function kick(t0, amp) {
 function clap(t0, amp) {
   const o = filt(white(0.25), 'bp', 1500, 1.1);
   env(o, (t) => (t < 0.03 ? (Math.floor(t / 0.009) % 2 === 0 ? 1 : 0.4) : Math.exp(-(t - 0.03) / 0.07)));
-  add(drums, t0, o, amp, 0, 0.35);
+  add(drums, t0, o, amp, 0, 0.15);
 }
 
 function hat(t0, amp, open = false) {
@@ -162,16 +162,16 @@ function pad(t0, dur, notes, amp, cutoff) {
   for (const [k, name] of notes.entries()) {
     const o = saw(hz(name), dur, [-0.011, -0.005, 0, 0.006, 0.012]);
     filt(o, 'lp', cutoff, 0.9);
-    env(o, ar(0.08, 0.25));
-    add(music, t0, o, amp, (k - 1) * 0.5, 0.5);
+    env(o, ar(0.06, 0.12));
+    add(music, t0, o, amp, (k - 1) * 0.5, 0.25);
   }
 }
 
 function pluck(t0, name, amp, cutoff, pan) {
-  const o = saw(hz(name), 0.3, [-0.003, 0.003]);
-  filt(o, 'lp', (t) => cutoff * (0.25 + Math.exp(-t / 0.06)), 2);
-  env(o, (t) => Math.exp(-t / 0.09));
-  add(music, t0, o, amp, pan, 0.55);
+  const o = saw(hz(name), 0.24, [-0.003, 0.003]);
+  filt(o, 'lp', (t) => cutoff * (0.25 + Math.exp(-t / 0.05)), 1.4);
+  env(o, (t, d) => Math.exp(-t / 0.07) * Math.min(1, (d - t) / 0.02));
+  add(music, t0, o, amp, pan, 0.2);
 }
 
 function riser(t0, t1, amp) {
@@ -216,67 +216,62 @@ function typing(t0, t1, perSec, amp) {
   for (let t = t0; t < t1; t += (1 / perSec) * (0.7 + rnd() * 0.6)) key(t, amp * (0.7 + rnd() * 0.3), rn() * 0.3);
 }
 
-// Music.
-for (let b = 0; b * BAR < T.duration; b++) {
-  const t0 = b * BAR;
+// Music: one chord per bar, an 8th-note arpeggio over it, bass on the off-beats.
+const ARP = [0, 1, 2, 3, 2, 1, 0, 1];
+for (let k = 0; k * BAR < S.end[0] - 1e-6; k++) {
+  const t0 = k * BAR;
   const [root, notes] = chordAt(t0);
   const intro = t0 < S.title[0];
   const ask = t0 >= S.ask[0] && t0 < S.configure[0];
-  const outro = t0 >= S.end[0];
-  const cutoff = intro ? 500 + 1400 * (t0 / S.title[0]) : ask ? 900 : outro ? 2600 : 3200;
-  pad(t0, BAR, notes, intro ? 0.09 : 0.11, cutoff);
-  for (let s = 0; s < 16; s++) {
-    const t = t0 + (s * BEAT) / 4;
-    if (t >= T.duration) break;
-    const drop = inDrop(t);
-    if (drop && s % 2 === 1) bass(t, s % 4 === 3 ? up(root) : root, BEAT / 2 - 0.01, 0.34);
-    if (!outro || s % 2 === 0) {
-      const note = [...notes, up(notes[0])][(s * 3 + Math.floor(s / 4)) % 4];
-      pluck(t, note, intro ? 0.07 + 0.05 * (t / S.title[0]) : drop ? 0.075 : 0.06, intro ? 900 + 3000 * (t / S.title[0]) : 4200, s % 2 ? 0.35 : -0.35);
-    }
+  const open = intro ? t0 / S.title[0] : 1;
+  pad(t0, BAR, notes, ask ? 0.1 : 0.075, ask ? 900 : 700 + 1600 * open);
+  if (ask) continue;
+  const tones = [...notes, up(notes[0])];
+  for (let s8 = 0; s8 < 8; s8++) {
+    const t = t0 + (s8 * BEAT) / 2;
+    pluck(t, up(tones[ARP[s8]]), 0.05 + 0.03 * open, 1200 + 2400 * open, s8 % 2 ? 0.3 : -0.3);
+    if (inDrop(t) && s8 % 2 === 1) bass(t, root, BEAT / 2 - 0.02, 0.36);
   }
 }
 
 // Drums.
-for (let t = 0; t < T.duration; t += BEAT / 4) {
-  const s = Math.round(t / (BEAT / 4)) % 16;
+for (let t = 0; t < S.end[0] - 1e-6; t += BEAT / 2) {
+  const s8 = Math.round(t / (BEAT / 2)) % 8;
   if (inDrop(t)) {
-    if (s % 4 === 0) kick(t, 0.95);
-    if (s === 4 || s === 12) clap(t, 0.5);
-    if (s % 4 === 2) hat(t, 0.22, true);
-    else if (t >= S.configure[0]) hat(t, 0.1);
-  } else if (t >= C.reveal && t < S.title[0] && s % 4 === 0) {
-    kick(t, 0.8);
+    if (s8 % 2 === 0) kick(t, 0.95);
+    if (s8 === 2 || s8 === 6) clap(t, 0.45);
+    if (s8 % 2 === 1) hat(t, 0.16, t >= S.configure[0]);
+  } else if (t >= C.reveal && t < S.title[0] && s8 % 2 === 0) {
+    kick(t, 0.75);
   }
 }
-for (const t of C.hookWords) clap(t, 0.32);
-for (let k = 0; k < 16; k++) clap(S.configure[0] - 1 + k / 16, 0.12 + 0.3 * (k / 16));
+for (const t of C.hookWords) clap(t, 0.3);
+for (let k = 0; k < 8; k++) clap(S.configure[0] - 1 + k / 8, 0.12 + 0.25 * (k / 8));
 
 // Sections.
-riser(S.title[0] - 2, S.title[0], 0.45);
-riser(S.configure[0] - 2, S.configure[0], 0.5);
-riser(C.configureFlip - 1, C.configureFlip, 0.3);
-riser(C.pluginAppears - 1.5, C.pluginAppears, 0.35);
-riser(S.end[0] - 1.5, S.end[0], 0.35);
-for (const t of [S.title[0], S.configure[0], C.configureFlip, C.pluginAppears, S.end[0]]) impact(t, 0.75);
-impact(C.reveal, 0.4);
-for (const t of [S.open[0], S.approve[0], S.jira[0], S.mouse[0], S.ask[0], S.plugin[0], S.shai[0]]) whoosh(t, 0.22);
-pad(S.end[0], S.end[1] - S.end[0], ['A3', 'C4', 'E4', 'A4'], 0.1, 2200);
-bass(S.end[0], 'A1', 2.5, 0.35);
+riser(C.reveal, S.title[0], 0.35);
+riser(S.configure[0] - 2.5, S.configure[0], 0.4);
+for (const t of [S.title[0], S.configure[0], S.end[0]]) impact(t, 0.7);
+for (const t of [C.configureFlip, C.pluginAppears]) impact(t, 0.45);
+for (const t of [S.open[0], S.mouse[0], S.ask[0], S.plugin[0], S.shai[0]]) whoosh(t, 0.15);
+const [, last] = CHORDS[0];
+pad(S.end[0], S.end[1] - S.end[0], [...last, up(last[0])], 0.09, 2000);
+bass(S.end[0], 'A1', 3, 0.35);
+for (let k = 0; k < 6; k++) pluck(S.end[0] + k * BEAT, up([...last, up(last[0])][ARP[k]]), 0.06 * (1 - k / 7), 3000, k % 2 ? 0.3 : -0.3);
 
 // Sound effects.
 key(C.keyOpen, 0.6);
 for (const t of C.confirm) key(t, 0.55);
 for (const t of C.transition) key(t, 0.55);
 for (const t of C.drags) key(t, 0.35);
-typing(...C.configureTyping, 22, 0.3);
-typing(...C.pluginTyping, 22, 0.3);
+typing(...C.configureTyping, 15, 0.26);
+typing(...C.pluginTyping, 15, 0.26);
 {
   let t = C.endTyping.start;
   for (const line of C.endTyping.lines) {
-    for (let i = 0; i < line.length; i++) key(t + i * C.endTyping.perChar, 0.35, rn() * 0.3);
+    for (let i = 0; i < line.length; i++) key(t + i * C.endTyping.perChar, 0.3, rn() * 0.3);
     t += line.length * C.endTyping.perChar + 0.45;
-    key(t - 0.4, 0.5);
+    key(t - 0.4, 0.45);
   }
 }
 
@@ -287,7 +282,7 @@ for (let i = 0; i < N; i++) {
   music[1][i] *= g;
 }
 
-function freeverb(inL, inR, { room = 0.84, damp = 0.3 } = {}) {
+function freeverb(inL, inR, { room = 0.72, damp = 0.45 } = {}) {
   const sc = SR / 44100;
   const combs = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
   const aps = [556, 441, 341, 225];

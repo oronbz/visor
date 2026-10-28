@@ -19,8 +19,10 @@ const WIDGETS = ROWS.flatMap(([top, bottom, cells]) =>
 
 const PROMPT: View = { cx: 760, cy: 800, w: 1100 };
 const REVIEW: View = { cx: 1450, cy: 706, w: 1000 };
+// Review requests with the Approve? popup that opens above it.
+const CONFIRM: View = { cx: 1270, cy: 660, w: 1300 };
 const JIRA: View = { cx: 660, cy: 706, w: 1000 };
-const HN: View = { cx: 1063, cy: 614, w: 1300 };
+const HN: View = { cx: 1063, cy: 640, w: 1740 };
 
 const Headline: React.FC<{ o: number; size?: number; children: React.ReactNode }> = ({ o, size = 104, children }) => (
   <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: o }}>
@@ -100,7 +102,7 @@ export const Title = () => {
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{ filter: 'blur(14px) brightness(0.45)', transform: `scale(${1.08 - 0.03 * ramp(t, a, S.title[1])})` }}>
-        <Take src="keys.mp4" cuts={[{ from: 3.6, len: S.title[1] - a }]} />
+        <Take src="keys.mp4" cuts={[{ from: 4.1, len: S.title[1] - a }]} />
       </AbsoluteFill>
       <Flash t={t} at={a} strength={0.5} />
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -120,7 +122,7 @@ export const Open = () => {
   const t = useAbs('open');
   return (
     <AbsoluteFill>
-      <Take src="keys.mp4" cuts={[{ from: 0.3, len: 3 }]} />
+      <Take src="keys.mp4" cuts={[{ from: 0.3, len: S.open[1] - S.open[0] }]} />
       <Flash t={t} at={C.keyOpen} strength={0.25} />
       <Caption t={t} a={S.open[0] + 0.15} b={S.open[1]} title="herdr">
         One key opens it over any tab.
@@ -133,7 +135,7 @@ export const Approve = () => {
   const t = useAbs('approve');
   return (
     <AbsoluteFill>
-      <Take src="keys.mp4" cuts={[{ from: 5.4, len: 3.5, cam: [[0, FULL], [0.7, REVIEW]] }]} />
+      <Take src="keys.mp4" cuts={[{ from: 5.0, len: S.approve[1] - S.approve[0], cam: [[0, FULL], [1.0, CONFIRM]] }]} />
       <Caption t={t} a={S.approve[0] + 0.6} b={S.approve[1]} title="Review requests">
         Approve a PR without leaving.
       </Caption>
@@ -145,7 +147,7 @@ export const Jira = () => {
   const t = useAbs('jira');
   return (
     <AbsoluteFill>
-      <Take src="keys.mp4" cuts={[{ from: 11.9, len: 3.5, cam: [[0, REVIEW], [0.5, JIRA]] }]} />
+      <Take src="keys.mp4" cuts={[{ from: 11.5, len: S.jira[1] - S.jira[0], cam: [[0, CONFIRM], [0.7, JIRA]] }]} />
       <Caption t={t} a={S.jira[0] + 0.4} b={S.jira[1]} title="Jira">
         Move a ticket to review.
       </Caption>
@@ -155,14 +157,13 @@ export const Jira = () => {
 
 export const Mouse = () => {
   const t = useAbs('mouse');
-  const near: View = { cx: 1060, cy: 560, w: 1700 };
   return (
     <AbsoluteFill>
       <Take
         src="mouse.mp4"
         cuts={[
-          { from: 6.0, len: 2.75, rate: 1.6, cam: [[0, JIRA], [0.4, near]] },
-          { from: 21.8, len: 2.25, rate: 1.6, cam: [[0, near], [1.2, REVIEW]] },
+          { from: 5.5, len: 6.5, rate: 1.5, cam: [[0, JIRA], [0.6, FULL]] },
+          { from: 21.3, len: 4.5, cam: [[0, FULL], [0.6, CONFIRM]] },
         ]}
       />
       <Caption t={t} a={S.mouse[0] + 0.5} b={S.mouse[1]} title="mouse">
@@ -221,19 +222,19 @@ const AgentTake: React.FC<{
 }> = ({ scene, src, typing, wait, payoff, payoffAt, zoomTo, caption, title }) => {
   const t = useAbs(scene);
   const [a, b] = S[scene];
-  const typeLen = 2;
-  const waitLen = 2;
+  const typeLen = C.agentTyping;
+  const waitLen = C.agentWait;
   const typeRate = (typing[1] - typing[0]) / typeLen;
   const waitRate = (payoff - wait) / waitLen;
   const hit = payoffAt - (a + typeLen + waitLen);
-  const end: [number, View][] = zoomTo ? [[0, FULL], [hit + 0.25, FULL], [hit + 1.1, zoomTo]] : [[0, FULL]];
+  const end: [number, View][] = zoomTo ? [[0, FULL], [hit + 0.6, FULL], [hit + 1.6, zoomTo]] : [[0, FULL]];
   return (
     <AbsoluteFill>
       <Take
         src={src}
         cuts={[
           { from: typing[0], len: typeLen, rate: typeRate, cam: [[0, PROMPT]] },
-          { from: wait, len: waitLen, rate: waitRate, cam: [[0, PROMPT], [1.2, FULL]] },
+          { from: wait, len: waitLen, rate: waitRate, cam: [[0, PROMPT], [1.4, FULL]] },
           { from: payoff, len: b - a - typeLen - waitLen, cam: end },
         ]}
       />
