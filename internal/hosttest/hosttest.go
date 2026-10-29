@@ -327,6 +327,8 @@ func (h *Host) run(cmd tea.Cmd) {
 		h.quit = true
 	case tea.RawMsg:
 		fmt.Fprint(&h.raw, msg.Msg)
+		// Bubble Tea updates the model with a RawMsg after writing it.
+		h.Send(msg)
 	case tea.BatchMsg:
 		for _, c := range msg {
 			h.run(c)

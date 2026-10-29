@@ -39,11 +39,13 @@ func (m Model) Theme() theme.Theme { return m.opts.Theme }
 // queryTerminal asks whether the terminal draws kitty graphics and how big
 // its cells are, then what queryColors asks.
 //
-// The queries go out before the first frame enters the alternate screen, and
-// a terminal without kitty graphics, such as Terminal.app, may print the
+// A terminal without kitty graphics, such as Terminal.app, may print the
 // graphics query's text. Asked from inside the alternate screen, that text
 // is gone once the first frame clears it, instead of left on the shell's
-// screen at quit.
+// screen at quit. Leaving the alternate screen after it would also leave
+// one visor had already entered, and draw the dashboard over the shell, so
+// View enters it and draws only once Update has seen the query go out:
+// Bubble Tea writes a RawMsg before it updates the model with it.
 func (m Model) queryTerminal() tea.Cmd {
 	graphics := ansi.SetModeAltScreenSaveCursor + graphicsQuery + ansi.ResetModeAltScreenSaveCursor
 	return m.query(append([]tea.Cmd{tea.Raw(graphics + cellSizeQueries)}, m.colorQueries()...))

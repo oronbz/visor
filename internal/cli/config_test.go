@@ -35,7 +35,7 @@ func sandbox(t *testing.T, env map[string]string, stdin string, args ...string) 
 		Args:   args,
 		Getenv: getenv,
 		Ports:  pp,
-		Stdin:  keys{strings.NewReader(stdin), stdout},
+		Stdin:  keys{r: strings.NewReader(stdin), screen: stdout},
 		Stdout: stdout,
 		Stderr: stderr,
 		ProgramOptions: []tea.ProgramOption{

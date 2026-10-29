@@ -78,7 +78,7 @@ func TestTheDemoLeavesTheUsersHomeUntouchedAndRunsTheirPluginInItsOwnRoot(t *tes
 	stdout, stderr := newScreen(), &bytes.Buffer{}
 	s := cli.System{
 		Args: []string{"demo", "--close-key", "ctrl+b d"}, Getenv: getenv, Ports: pp,
-		Stdin: started{keys{strings.NewReader("q"), stdout}, seen}, Stdout: stdout, Stderr: stderr,
+		Stdin: started{keys{r: strings.NewReader("q"), screen: stdout}, seen}, Stdout: stdout, Stderr: stderr,
 		ProgramOptions: []tea.ProgramOption{tea.WithWindowSize(160, 50), tea.WithoutSignals()},
 	}
 

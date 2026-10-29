@@ -56,22 +56,27 @@ func scratch(t *testing.T) string {
 	return dir
 }
 
-// screen is visor's output, noting when a frame with text is first drawn.
+// screen is visor's output, noting when a frame with text is first drawn
+// and when the startup queries have gone out.
 type screen struct {
 	bytes.Buffer
-	mu    sync.Mutex
-	once  sync.Once
-	drawn chan struct{}
+	mu                sync.Mutex
+	drawnOnce, asked1 sync.Once
+	drawn, asked      chan struct{}
 }
 
-func newScreen() *screen { return &screen{drawn: make(chan struct{})} }
+func newScreen() *screen { return &screen{drawn: make(chan struct{}), asked: make(chan struct{})} }
 
 func (s *screen) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n, err := s.Buffer.Write(p)
 	if strings.TrimSpace(ansi.Strip(s.Buffer.String())) != "" {
-		s.once.Do(func() { close(s.drawn) })
+		s.drawnOnce.Do(func() { close(s.drawn) })
+	}
+	// Device attributes are asked last, after every other startup query.
+	if strings.Contains(s.Buffer.String(), ansi.RequestPrimaryDeviceAttributes) {
+		s.asked1.Do(func() { close(s.asked) })
 	}
 	return n, err
 }
@@ -82,6 +87,8 @@ func (s *screen) Write(p []byte) (int, error) {
 type keys struct {
 	r      *strings.Reader
 	screen *screen
+	// afterQueries holds the keys back until the startup queries have gone out too.
+	afterQueries bool
 }
 
 func (k keys) Read(p []byte) (int, error) {
@@ -89,6 +96,9 @@ func (k keys) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 	<-k.screen.drawn
+	if k.afterQueries {
+		<-k.screen.asked
+	}
 	return k.r.Read(p)
 }
 
@@ -101,7 +111,7 @@ func system(t *testing.T, stdin string, args ...string) (cli.System, *screen, *b
 		Args:   args,
 		Getenv: getenv,
 		Ports:  pp,
-		Stdin:  keys{strings.NewReader(stdin), stdout},
+		Stdin:  keys{r: strings.NewReader(stdin), screen: stdout},
 		Stdout: stdout,
 		Stderr: stderr,
 		ProgramOptions: []tea.ProgramOption{
@@ -137,6 +147,28 @@ func TestVisorDrawsTheClockAndQuitsOnQ(t *testing.T) {
 	enter, leave := ansi.SetModeAltScreenSaveCursor, ansi.ResetModeAltScreenSaveCursor
 	if !strings.Contains(out, enter) || strings.LastIndex(out, leave) < strings.LastIndex(out, enter) {
 		t.Errorf("alt screen not entered and then restored:\n%q", out)
+	}
+}
+
+func TestVisorDrawsEveryFrameOnTheAlternateScreen(t *testing.T) {
+	s, stdout, stderr := system(t, "q")
+	s.Stdin = keys{r: strings.NewReader("q"), screen: stdout, afterQueries: true}
+
+	if code := run(t, s); code != 0 {
+		t.Fatalf("exit code %d, stderr: %s", code, stderr)
+	}
+	out := stdout.String()
+	enter, leave := ansi.SetModeAltScreenSaveCursor, ansi.ResetModeAltScreenSaveCursor
+	drawn := strings.Index(out, "Clock")
+	if drawn < 0 {
+		t.Fatalf("no Clock tile drawn:\n%q", out)
+	}
+	before, after := out[:drawn], out[drawn:]
+	if strings.LastIndex(before, enter) < strings.LastIndex(before, leave) {
+		t.Errorf("first frame drawn on the main screen:\n%q", out)
+	}
+	if n := strings.Count(after, leave); n != 1 {
+		t.Errorf("left the alt screen %d times after the first frame, want once at exit:\n%q", n, out)
 	}
 }
 

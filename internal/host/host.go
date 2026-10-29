@@ -102,6 +102,8 @@ type Model struct {
 	// heldModifier is only reported by kitty-protocol terminals.
 	heldModifier tea.KeyMod
 	colors       colors
+	// queried is set once the graphics query has gone out; see queryTerminal.
+	queried      bool
 	mouse        bool
 	hover        *layout.Zone
 	drag         *drag
@@ -259,6 +261,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	switch msg := msg.(type) {
+	case tea.RawMsg:
+		if strings.Contains(fmt.Sprint(msg.Msg), graphicsQuery) {
+			m.queried = true
+		}
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		for _, id := range m.ids() {
@@ -348,7 +354,7 @@ func (m Model) nextTick() tea.Cmd {
 
 func (m Model) View() tea.View {
 	v := tea.NewView("")
-	v.AltScreen = true
+	v.AltScreen = m.queried
 	v.BackgroundColor = m.background()
 	// Report-all-keys and event types make lone modifier presses and releases
 	// arrive, for the modifier footer.
@@ -361,7 +367,7 @@ func (m Model) View() tea.View {
 	if m.mouse {
 		v.MouseMode = tea.MouseModeAllMotion
 	}
-	if m.w == 0 || m.h == 0 {
+	if m.w == 0 || m.h == 0 || !m.queried {
 		return v
 	}
 	var layers []*lipgloss.Layer
