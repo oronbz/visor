@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/oronbz/visor/internal/layout"
@@ -277,7 +278,7 @@ func (m Model) dragLayers(s scene) []*lipgloss.Layer {
 
 // tint lights the border cells in rs in the accent colour, leaving any text
 // drawn over the border (a title) as it is.
-func (m Model) tint(c *lipgloss.Canvas, rs []layout.Rect) {
+func (m Model) tint(c uv.Screen, rs []layout.Rect) {
 	accent := m.opts.Theme.Color(theme.Accent)
 	for _, r := range rs {
 		for y := r.Y; y < r.Y+r.H; y++ {

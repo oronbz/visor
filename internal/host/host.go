@@ -6,7 +6,6 @@ package host
 
 import (
 	"fmt"
-	"image"
 	"math/rand/v2"
 	"path/filepath"
 	"slices"
@@ -15,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/oronbz/visor/internal/cache"
@@ -92,6 +92,8 @@ type Model struct {
 	// timers numbers the refresh timers app-wide, so a rebuilt Widget's old
 	// timers never match.
 	timers *int
+	// screen keeps the last frame, so View redraws only what changed.
+	screen *render.Screen
 	// Each timer chain is kept to one.
 	spinning, checkingWallClock bool
 	overlay                     *overlay
@@ -146,7 +148,7 @@ var Builtins = slices.Concat([]widget.Type{clock.Type, calendar.Type}, macTypes,
 func New(o Options) Model {
 	m := Model{opts: o, now: o.Ports.Clock.Now(), widgets: map[string]placed{},
 		fetched: map[string]widget.Payload{}, lists: map[string]listState{},
-		sched: map[string]sched{}, paused: map[string]time.Time{}, cache: cacheStore(o), rng: newRand(o.Ports.Clock.Now()), timers: new(int),
+		sched: map[string]sched{}, paused: map[string]time.Time{}, cache: cacheStore(o), rng: newRand(o.Ports.Clock.Now()), timers: new(int), screen: render.NewScreen(),
 		closing: closekey.NewMatcher(o.CloseKeys), plugins: plugin.NewRegistry(o.PluginEnv...), pushes: make(chan tea.Msg, 64), observed: map[string]observation{}, images: newImages()}
 	file := o.ConfigFile
 	if file == "" {
@@ -385,7 +387,7 @@ func (m Model) View() tea.View {
 			if m.editing != nil && t.ID == m.editing.widget {
 				layers = append(layers, m.editorLayer(t.X, t.Y))
 			}
-			layers = append(layers, lipgloss.NewLayer(render.Draw(m.opts.Theme, s.tiles[i])).X(t.X).Y(t.Y))
+			layers = append(layers, lipgloss.NewLayer(m.screen.Tile(t.ID, m.opts.Theme, s.tiles[i])).X(t.X).Y(t.Y))
 		}
 		layers = append(layers, m.dragLayers(s)...)
 		layers = append(layers, lipgloss.NewLayer(m.footer()).Y(m.h-footerHeight))
@@ -408,10 +410,11 @@ func (m Model) View() tea.View {
 	if m.showsPopup() {
 		layers = append(layers, m.popupLayer())
 	}
-	canvas := lipgloss.NewCanvas(m.w, m.h)
-	lipgloss.NewCompositor(layers...).Draw(canvas, image.Rect(0, 0, m.w, m.h))
-	m.tint(canvas, s.Tint)
-	v.SetContent(canvas.Render())
+	var tint func(uv.Screen)
+	if len(s.Tint) > 0 {
+		tint = func(scr uv.Screen) { m.tint(scr, s.Tint) }
+	}
+	v.SetContent(m.screen.Frame(m.w, m.h, layers, tint))
 	return v
 }
 
