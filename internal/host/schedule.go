@@ -51,6 +51,13 @@ type sched struct {
 	// waiting is a refresh another instance is making, spun here too until
 	// its entry lands or this instance tries again.
 	waiting bool
+	// written is when the newest entry this instance knows of was checked,
+	// whichever instance wrote it; pending is the push held back until
+	// pushWrite after it, and flush its armed timer.
+	written   time.Time
+	pending   *widget.Push
+	pendingAt time.Time
+	flush     int
 }
 
 type refreshedMsg struct {
@@ -285,6 +292,9 @@ func (m Model) refreshed(msg refreshedMsg) (Model, tea.Cmd) {
 		}
 		s, limited = m.settle(msg.id, s, msg.payload, fetched, msg.err)
 		s.checked = msg.at
+		if s.key != "" && !local(msg.err) {
+			s.written = msg.at
+		}
 	}
 	m.sched[msg.id] = s
 	m.clampList(msg.id)

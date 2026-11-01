@@ -42,7 +42,9 @@ type Status struct {
 	Until  time.Time      `json:"until,omitzero"`
 }
 
-// Store is the cache directory, ~/.cache/visor/widgets.
+// Store is the cache directory, ~/.cache/visor/widgets. Each entry has a
+// directory of its own, so a write wakes only the instances watching that
+// entry, and their watchers rescan a directory of one or two files.
 type Store struct{ Dir string }
 
 // Key names a Widget's entry: its id plus a hash of its type, settings and
@@ -66,9 +68,9 @@ func Key(id, typ, version string, settings widget.Settings) string {
 }
 
 // File is the entry file of key, the file to watch for other instances' fetches.
-func (s Store) File(key string) string { return filepath.Join(s.Dir, key+".json") }
+func (s Store) File(key string) string { return filepath.Join(s.Dir, key, "entry.json") }
 
-func (s Store) lockFile(key string) string { return filepath.Join(s.Dir, key+".lock") }
+func (s Store) lockFile(key string) string { return filepath.Join(s.Dir, key, "lock") }
 
 // Load reads key's entry; ok is false when there is none or it doesn't parse.
 func (s Store) Load(key string) (e Entry, ok bool) {
@@ -85,10 +87,10 @@ func (s Store) Save(key string, e Entry) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(s.Dir, key), 0o700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(s.Dir, key+".*.tmp")
+	f, err := os.CreateTemp(filepath.Join(s.Dir, key), "entry.*.tmp")
 	if err != nil {
 		return err
 	}
@@ -111,7 +113,7 @@ func (s Store) Save(key string, e Entry) error {
 // another instance holds it. A lock taken timeout or more before now, or by
 // a process that has since exited, was abandoned, and is taken over.
 func (s Store) Lock(key string, now time.Time, timeout time.Duration) (unlock func(), ok bool) {
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(s.Dir, key), 0o700); err != nil {
 		return nil, false
 	}
 	name := s.lockFile(key)
@@ -155,7 +157,7 @@ func held(lock string, now time.Time, timeout time.Duration) bool {
 
 // Clean deletes what's in the cache directory that belongs to none of keep
 // and was last written before cutoff: entries of removed or reconfigured
-// Widgets, and the leftovers of interrupted writes.
+// Widgets, and the files of the flat layout older versions wrote.
 func (s Store) Clean(keep []string, cutoff time.Time) error {
 	des, err := os.ReadDir(s.Dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -165,17 +167,14 @@ func (s Store) Clean(keep []string, cutoff time.Time) error {
 		return err
 	}
 	for _, de := range des {
-		name := de.Name()
-		if strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".lock") {
-			if k := strings.TrimSuffix(strings.TrimSuffix(name, ".json"), ".lock"); slices.Contains(keep, k) {
-				continue
-			}
-		}
-		info, err := de.Info()
-		if err != nil || de.IsDir() || !info.ModTime().Before(cutoff) {
+		if de.IsDir() && slices.Contains(keep, de.Name()) {
 			continue
 		}
-		os.Remove(filepath.Join(s.Dir, name))
+		info, err := de.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		os.RemoveAll(filepath.Join(s.Dir, de.Name()))
 	}
 	return nil
 }

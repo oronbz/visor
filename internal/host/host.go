@@ -284,6 +284,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushed(msg)
 	case retryMsg:
 		return m.retried(msg)
+	case pushFlushMsg:
+		return m.flushPush(msg)
 	case startMsg:
 		m, fetch := m.startAll(false)
 		m, beat := m.beat()

@@ -163,6 +163,7 @@ func TestAPluginCrashStaysWithTheInstanceWhoseProcessStopped(t *testing.T) {
 	a := withPlugin(t, plugintest.Options{}, fixtureWidget)
 	a.Press("1")
 	a.Receive()
+	a.Advance(10 * time.Second)
 	entry := entryFile(t, a.Root)
 	before, err := os.ReadFile(entry)
 	if err != nil {

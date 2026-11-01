@@ -102,17 +102,64 @@ func record(e cache.Entry, p widget.Payload, err error, now time.Time) cache.Ent
 	return e
 }
 
+// pushWrite is the least time between writes of one Widget's pushes to its
+// entry, across instances. Every instance gets the pushes itself; the entry
+// only has to be recent enough for an instance starting up.
+const pushWrite = 10 * time.Second
+
+type pushFlushMsg struct {
+	id  string
+	seq int
+}
+
 // cachePush leaves out updates about this instance alone, and ones that
-// change nothing.
-func (m Model) cachePush(s sched, push widget.Push, now time.Time) (sched, tea.Cmd) {
+// change nothing, and holds back a push due within pushWrite of the entry's
+// last write until then, writing only the latest.
+func (m Model) cachePush(id string, s sched, push widget.Push, now time.Time) (sched, tea.Cmd) {
 	if s.key == "" || push.Lost || local(push.Err) || push.Payload == nil && push.Err == nil {
 		return s, nil
 	}
+	s.checked = now
+	s.pending, s.pendingAt = &push, now
+	if s.flush != 0 {
+		return s, nil
+	}
+	if wait := s.written.Add(pushWrite).Sub(now); wait > 0 {
+		return m.flushIn(id, s, wait)
+	}
+	return m.writePush(s)
+}
+
+func (m Model) flushIn(id string, s sched, wait time.Duration) (sched, tea.Cmd) {
+	s.flush = m.nextTimer()
+	seq := s.flush
+	return s, m.opts.Ports.Clock.After(wait, func(time.Time) tea.Msg { return pushFlushMsg{id: id, seq: seq} })
+}
+
+func (m Model) flushPush(msg pushFlushMsg) (Model, tea.Cmd) {
+	s, ok := m.sched[msg.id]
+	if !ok || s.flush != msg.seq {
+		return m, nil
+	}
+	s.flush = 0
+	var cmd tea.Cmd
+	// Another instance may have written the entry meanwhile.
+	if wait := s.written.Add(pushWrite).Sub(m.opts.Ports.Clock.Now()); wait > 0 {
+		s, cmd = m.flushIn(msg.id, s, wait)
+	} else {
+		s, cmd = m.writePush(s)
+	}
+	m.sched[msg.id] = s
+	return m, cmd
+}
+
+func (m Model) writePush(s sched) (sched, tea.Cmd) {
+	push, now := *s.pending, s.pendingAt
+	s.pending, s.written = nil, now
 	var p widget.Payload
 	if push.Payload != nil {
 		p = *push.Payload
 	}
-	s.checked = now
 	store, key := m.cache, s.key
 	return s, func() tea.Msg {
 		// A held lock is a fetch in flight in another instance, which writes the entry.
@@ -150,6 +197,7 @@ func (m Model) adopt(id string, e cache.Entry) {
 	}
 	s, _ = m.settle(id, s, e.Payload, fetched, errOf(e.Status))
 	s.checked, s.fails, s.waiting = e.CheckedAt, e.Fails, false
+	s.written = later(s.written, e.CheckedAt)
 	m.sched[id] = s
 }
 
@@ -163,7 +211,12 @@ func (m Model) adoptChanged(files []string) (Model, []tea.Cmd) {
 			continue
 		}
 		e, ok := m.cache.Load(s.key)
-		if !ok || !e.CheckedAt.After(s.checked) {
+		if !ok {
+			continue
+		}
+		s.written = later(s.written, e.CheckedAt)
+		m.sched[id] = s
+		if !e.CheckedAt.After(s.checked) {
 			continue
 		}
 		m.adopt(id, e)
@@ -171,6 +224,13 @@ func (m Model) adoptChanged(files []string) (Model, []tea.Cmd) {
 		cmds = append(cmds, m.plan(id, m.next(id, e.CheckedAt)))
 	}
 	return m, cmds
+}
+
+func later(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 func (m Model) cleanCache() tea.Cmd {

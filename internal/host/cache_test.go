@@ -100,7 +100,7 @@ func TestTheFirstFrameDrawsTheCachedEntryWithItsAgeUntilFreshDataLands(t *testin
 // entryFile is the one cache entry under root.
 func entryFile(t *testing.T, root string) string {
 	t.Helper()
-	files, _ := filepath.Glob(filepath.Join(paths.Under(root).Cache, "widgets", "*.json"))
+	files, _ := filepath.Glob(filepath.Join(paths.Under(root).Cache, "widgets", "*", "entry.json"))
 	if len(files) != 1 {
 		t.Fatalf("cache entries %v, want one", files)
 	}
@@ -190,7 +190,7 @@ func TestChangingAWidgetsSettingsUsesANewCacheEntry(t *testing.T) {
 	if u.count() != 2 || !strings.Contains(h.Screen(), "sport edition 2") {
 		t.Errorf("fetched %d times after the topic changed, want 2; screen:\n%s", u.count(), h.Screen())
 	}
-	if files, _ := filepath.Glob(filepath.Join(h.Paths.Cache, "widgets", "*.json")); len(files) != 2 {
+	if files, _ := filepath.Glob(filepath.Join(h.Paths.Cache, "widgets", "*", "entry.json")); len(files) != 2 {
 		t.Errorf("cache entries %v, want one per topic", files)
 	}
 
@@ -219,12 +219,21 @@ func TestCacheEntriesAreReadableOnlyByTheUser(t *testing.T) {
 func TestStartRemovesEntriesOfNoConfiguredWidgetOnceTheyreOver30DaysOld(t *testing.T) {
 	root, u := t.TempDir(), &upstream{}
 	newsHost(t, u, root, hosttest.DefaultNow)
-	configured := entryFile(t, root)
+	configured := filepath.Dir(entryFile(t, root))
 	dir := filepath.Dir(configured)
-	old, recent := filepath.Join(dir, "gone-0123456789ab.json"), filepath.Join(dir, "moved-0123456789ab.json")
-	ages := map[string]time.Duration{configured: 40 * 24 * time.Hour, old: 31 * 24 * time.Hour, recent: 29 * 24 * time.Hour}
+	old, recent := filepath.Join(dir, "gone-0123456789ab"), filepath.Join(dir, "moved-0123456789ab")
+	flat := filepath.Join(dir, "news-0123456789ab.json")
+	ages := map[string]time.Duration{configured: 40 * 24 * time.Hour, old: 31 * 24 * time.Hour, recent: 29 * 24 * time.Hour, flat: 31 * 24 * time.Hour}
 	for f, age := range ages {
-		if f != configured {
+		switch f {
+		case old, recent:
+			if err := os.MkdirAll(f, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(f, "entry.json"), []byte("{}"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		case flat:
 			if err := os.WriteFile(f, []byte("{}"), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -235,7 +244,7 @@ func TestStartRemovesEntriesOfNoConfiguredWidgetOnceTheyreOver30DaysOld(t *testi
 	}
 
 	newsHost(t, u, root, hosttest.DefaultNow.Add(time.Minute))
-	for f, want := range map[string]bool{configured: true, old: false, recent: true} {
+	for f, want := range map[string]bool{configured: true, old: false, recent: true, flat: false} {
 		if _, err := os.Stat(f); (err == nil) != want {
 			t.Errorf("%s exists: %v, want %v", filepath.Base(f), err == nil, want)
 		}
@@ -246,9 +255,9 @@ func TestStartRemovesEntriesOfNoConfiguredWidgetOnceTheyreOver30DaysOld(t *testi
 // that is still running but never finishes its fetch would.
 func lockEntry(t *testing.T, root string, at time.Time) {
 	t.Helper()
-	file := entryFile(t, root)
-	store := cache.Store{Dir: filepath.Dir(file)}
-	if _, ok := store.Lock(strings.TrimSuffix(filepath.Base(file), ".json"), at, time.Minute); !ok {
+	dir := filepath.Dir(entryFile(t, root))
+	store := cache.Store{Dir: filepath.Dir(dir)}
+	if _, ok := store.Lock(filepath.Base(dir), at, time.Minute); !ok {
 		t.Fatal("the entry's lock is taken")
 	}
 }
@@ -264,7 +273,7 @@ func lockEntryByExited(t *testing.T, root string, at time.Time) {
 	if err := exited.Run(); err != nil {
 		t.Fatal(err)
 	}
-	lock := strings.TrimSuffix(entryFile(t, root), ".json") + ".lock"
+	lock := filepath.Join(filepath.Dir(entryFile(t, root)), "lock")
 	content := at.Format(time.RFC3339Nano) + " " + strconv.Itoa(exited.Process.Pid)
 	if err := os.WriteFile(lock, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -386,6 +395,7 @@ func TestAPushIsWrittenToTheCacheForOtherInstances(t *testing.T) {
 	if !strings.Contains(a.Screen(), "breaking news") {
 		t.Fatalf("a shows:\n%s\nwant the pushed payload", a.Screen())
 	}
+	a.Advance(10 * time.Second)
 
 	b := liveNewsHost(t, u, w, root, hosttest.DefaultNow.Add(time.Minute))
 	if !strings.Contains(b.Screen(), "breaking news") {
@@ -440,6 +450,58 @@ func TestAPushThatChangesNothingLeavesTheEntryAlone(t *testing.T) {
 	w.deliver(widget.Push{Retry: hosttest.DefaultNow.Add(time.Hour)})
 	a.Receive()
 	check("the push only asked for a retry")
+}
+
+// entryHas fails the test unless root's one cache entry holds text.
+func entryHas(t *testing.T, root, text, why string) {
+	t.Helper()
+	if b, err := os.ReadFile(entryFile(t, root)); err != nil || !strings.Contains(string(b), text) {
+		t.Errorf("the cache entry lacks %q: %s", text, why)
+	}
+}
+
+func TestPushesWithinTenSecondsOfTheLastWriteLandInTheCacheTogetherAsTheLatest(t *testing.T) {
+	root, u, w := t.TempDir(), &upstream{}, &wire{}
+	a := liveNewsHost(t, u, w, root, hosttest.DefaultNow)
+	check := untouched(t, entryFile(t, root))
+
+	w.send("first take")
+	a.Receive()
+	a.Advance(2 * time.Second)
+	w.send("second take")
+	a.Receive()
+	check("the pushes came within 10s of the fetch's write")
+
+	a.Advance(8 * time.Second)
+	entryHas(t, root, "second take", "10s after the fetch's write, the latest push lands")
+	check = untouched(t, entryFile(t, root))
+	a.Advance(time.Second)
+	w.send("third take")
+	a.Receive()
+	check("the push came within 10s of the last write")
+	a.Advance(time.Second)
+	entryHas(t, root, "third take", "10s after the last push written, the next lands")
+}
+
+func TestAnInstanceHoldsBackItsPushesWithinTenSecondsOfAnotherInstancesWrite(t *testing.T) {
+	root, u, wa, wb := t.TempDir(), &upstream{}, &wire{}, &wire{}
+	a := liveNewsHost(t, u, wa, root, hosttest.DefaultNow)
+	b := liveNewsHost(t, u, wb, root, hosttest.DefaultNow)
+	a.Advance(10 * time.Second)
+	b.Advance(10 * time.Second)
+
+	wa.send("from a")
+	a.Receive()
+	entryHas(t, root, "from a", "a's push came 10s after the fetch's write")
+	b.Changed(entryFile(t, root))
+	check := untouched(t, entryFile(t, root))
+	b.Advance(3 * time.Second)
+	wb.send("from b")
+	b.Receive()
+	check("b's push came within 10s of a's write")
+
+	b.Advance(7 * time.Second)
+	entryHas(t, root, "from b", "10s after a's write, b's push lands")
 }
 
 func TestPRsMeetingsAndRemindersAreCachedWidgets(t *testing.T) {
