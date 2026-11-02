@@ -216,14 +216,16 @@ func TestCacheEntriesAreReadableOnlyByTheUser(t *testing.T) {
 	}
 }
 
-func TestStartRemovesEntriesOfNoConfiguredWidgetOnceTheyreOver30DaysOld(t *testing.T) {
+func TestStartRemovesEntriesOfNoConfiguredWidgetAndLeftoverWritesOnceTheyreOver30DaysOld(t *testing.T) {
 	root, u := t.TempDir(), &upstream{}
 	newsHost(t, u, root, hosttest.DefaultNow)
 	configured := filepath.Dir(entryFile(t, root))
 	dir := filepath.Dir(configured)
 	old, recent := filepath.Join(dir, "gone-0123456789ab"), filepath.Join(dir, "moved-0123456789ab")
 	flat := filepath.Join(dir, "news-0123456789ab.json")
-	ages := map[string]time.Duration{configured: 40 * 24 * time.Hour, old: 31 * 24 * time.Hour, recent: 29 * 24 * time.Hour, flat: 31 * 24 * time.Hour}
+	staleWrite, liveWrite := filepath.Join(configured, "entry.1.tmp"), filepath.Join(configured, "entry.2.tmp")
+	ages := map[string]time.Duration{configured: 40 * 24 * time.Hour, old: 31 * 24 * time.Hour, recent: 29 * 24 * time.Hour,
+		flat: 31 * 24 * time.Hour, staleWrite: 31 * 24 * time.Hour, liveWrite: time.Second}
 	for f, age := range ages {
 		switch f {
 		case old, recent:
@@ -233,7 +235,7 @@ func TestStartRemovesEntriesOfNoConfiguredWidgetOnceTheyreOver30DaysOld(t *testi
 			if err := os.WriteFile(filepath.Join(f, "entry.json"), []byte("{}"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-		case flat:
+		case flat, staleWrite, liveWrite:
 			if err := os.WriteFile(f, []byte("{}"), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -244,7 +246,7 @@ func TestStartRemovesEntriesOfNoConfiguredWidgetOnceTheyreOver30DaysOld(t *testi
 	}
 
 	newsHost(t, u, root, hosttest.DefaultNow.Add(time.Minute))
-	for f, want := range map[string]bool{configured: true, old: false, recent: true, flat: false} {
+	for f, want := range map[string]bool{configured: true, old: false, recent: true, flat: false, staleWrite: false, liveWrite: true} {
 		if _, err := os.Stat(f); (err == nil) != want {
 			t.Errorf("%s exists: %v, want %v", filepath.Base(f), err == nil, want)
 		}
@@ -380,11 +382,15 @@ func (n liveNews) Listen(push func(widget.Push)) {
 // liveNewsHost is newsHost with a News Widget that also takes pushes from w.
 func liveNewsHost(t *testing.T, u *upstream, w *wire, root string, now time.Time) *hosttest.Host {
 	t.Helper()
+	return hosttest.New(t, hosttest.Options{Root: root, Now: now, Width: 60, Height: 8, Types: []widget.Type{liveNewsType(u, w)}})
+}
+
+func liveNewsType(u *upstream, w *wire) widget.Type {
 	typ := newsType(u)
 	typ.New = func(c widget.Config) widget.Widget {
 		return liveNews{news{up: u, topic: c.Settings.String("topic")}, w}
 	}
-	return hosttest.New(t, hosttest.Options{Root: root, Now: now, Width: 60, Height: 8, Types: []widget.Type{typ}})
+	return typ
 }
 
 func TestAPushIsWrittenToTheCacheForOtherInstances(t *testing.T) {
@@ -452,7 +458,6 @@ func TestAPushThatChangesNothingLeavesTheEntryAlone(t *testing.T) {
 	check("the push only asked for a retry")
 }
 
-// entryHas fails the test unless root's one cache entry holds text.
 func entryHas(t *testing.T, root, text, why string) {
 	t.Helper()
 	if b, err := os.ReadFile(entryFile(t, root)); err != nil || !strings.Contains(string(b), text) {
@@ -478,9 +483,53 @@ func TestPushesWithinTenSecondsOfTheLastWriteLandInTheCacheTogetherAsTheLatest(t
 	a.Advance(time.Second)
 	w.send("third take")
 	a.Receive()
-	check("the push came within 10s of the last write")
+	a.Advance(8 * time.Second)
+	check("the push came within 10s of the last write, however long before it that push came")
 	a.Advance(time.Second)
-	entryHas(t, root, "third take", "10s after the last push written, the next lands")
+	entryHas(t, root, "third take", "10s after the last write, the next lands")
+}
+
+func TestAPushHeldOffByTheEntrysLockLandsOnceTheLockIsFree(t *testing.T) {
+	root, u, w := t.TempDir(), &upstream{}, &wire{}
+	a := liveNewsHost(t, u, w, root, hosttest.DefaultNow)
+	check := untouched(t, entryFile(t, root))
+	lockEntry(t, root, hosttest.DefaultNow)
+
+	w.send("breaking news")
+	a.Receive()
+	a.Advance(10 * time.Second)
+	check("another instance held the entry's lock when the push was due")
+	if err := os.Remove(filepath.Join(filepath.Dir(entryFile(t, root)), "lock")); err != nil {
+		t.Fatal(err)
+	}
+	a.Advance(10 * time.Second)
+	entryHas(t, root, "breaking news", "the lock was free 10s later and no fetch had written the entry")
+}
+
+func TestQuittingWritesThePushHeldBack(t *testing.T) {
+	root, u, w := t.TempDir(), &upstream{}, &wire{}
+	a := liveNewsHost(t, u, w, root, hosttest.DefaultNow)
+	w.send("breaking news")
+	a.Receive()
+	a.Press("q")
+	if !a.Quit() {
+		t.Fatal("q didn't quit")
+	}
+	entryHas(t, root, "breaking news", "the push was held back when visor quit")
+}
+
+func TestAWidgetRebuiltOntoTheSameEntryStillWritesThePushItHeld(t *testing.T) {
+	root, u, w := t.TempDir(), &upstream{}, &wire{}
+	a := hosttest.New(t, hosttest.Options{Root: root, Width: 60, Height: 8, Types: []widget.Type{liveNewsType(u, w)},
+		Config: "[[widget]]\ntype = \"news\"\n"})
+	w.send("breaking news")
+	a.Receive()
+	writeConfig(t, a, "[[widget]]\ntype = \"news\"\ntitle = \"Headlines\"\n")
+	if !strings.Contains(a.Screen(), "Headlines") {
+		t.Fatalf("a shows:\n%s\nwant the Widget retitled", a.Screen())
+	}
+	a.Advance(10 * time.Second)
+	entryHas(t, root, "breaking news", "the retitled Widget keeps its entry")
 }
 
 func TestAnInstanceHoldsBackItsPushesWithinTenSecondsOfAnotherInstancesWrite(t *testing.T) {

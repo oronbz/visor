@@ -155,9 +155,10 @@ func held(lock string, now time.Time, timeout time.Duration) bool {
 	return err != nil || running(pid)
 }
 
-// Clean deletes what's in the cache directory that belongs to none of keep
-// and was last written before cutoff: entries of removed or reconfigured
-// Widgets, and the files of the flat layout older versions wrote.
+// Clean deletes what was last written before cutoff in the cache directory:
+// entries that belong to none of keep, those of removed or reconfigured
+// Widgets, the files of the flat layout older versions wrote, and in the
+// entries kept, temporary files a write cut short left.
 func (s Store) Clean(keep []string, cutoff time.Time) error {
 	des, err := os.ReadDir(s.Dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -168,13 +169,19 @@ func (s Store) Clean(keep []string, cutoff time.Time) error {
 	}
 	for _, de := range des {
 		if de.IsDir() && slices.Contains(keep, de.Name()) {
+			leftovers, _ := filepath.Glob(filepath.Join(s.Dir, de.Name(), "entry.*.tmp"))
+			for _, name := range leftovers {
+				removeOlder(name, cutoff)
+			}
 			continue
 		}
-		info, err := de.Info()
-		if err != nil || !info.ModTime().Before(cutoff) {
-			continue
-		}
-		os.RemoveAll(filepath.Join(s.Dir, de.Name()))
+		removeOlder(filepath.Join(s.Dir, de.Name()), cutoff)
 	}
 	return nil
+}
+
+func removeOlder(name string, cutoff time.Time) {
+	if info, err := os.Lstat(name); err == nil && info.ModTime().Before(cutoff) {
+		os.RemoveAll(name)
+	}
 }

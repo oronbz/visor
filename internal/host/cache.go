@@ -102,38 +102,41 @@ func record(e cache.Entry, p widget.Payload, err error, now time.Time) cache.Ent
 	return e
 }
 
-// pushWrite is the least time between writes of one Widget's pushes to its
-// entry, across instances. Every instance gets the pushes itself; the entry
-// only has to be recent enough for an instance starting up.
-const pushWrite = 10 * time.Second
+// pushWriteGap is the least time between writes of one Widget's pushes to
+// its entry, across instances. Every instance gets the pushes itself; the
+// entry only has to be recent enough for an instance starting up.
+const pushWriteGap = 10 * time.Second
+
+// heldPush is the latest push held back from a Widget's entry, and when it came.
+type heldPush struct {
+	push widget.Push
+	at   time.Time
+}
 
 type pushFlushMsg struct {
 	id  string
 	seq int
 }
 
+// pushBlockedMsg is a held push whose write found the entry's lock taken.
+type pushBlockedMsg struct {
+	id   string
+	held heldPush
+}
+
 // cachePush leaves out updates about this instance alone, and ones that
-// change nothing, and holds back a push due within pushWrite of the entry's
-// last write until then, writing only the latest.
+// change nothing, and holds back a push due within pushWriteGap of the
+// entry's last write until then, writing only the latest.
 func (m Model) cachePush(id string, s sched, push widget.Push, now time.Time) (sched, tea.Cmd) {
 	if s.key == "" || push.Lost || local(push.Err) || push.Payload == nil && push.Err == nil {
 		return s, nil
 	}
 	s.checked = now
-	s.pending, s.pendingAt = &push, now
+	s.held = &heldPush{push: push, at: now}
 	if s.flush != 0 {
 		return s, nil
 	}
-	if wait := s.written.Add(pushWrite).Sub(now); wait > 0 {
-		return m.flushIn(id, s, wait)
-	}
-	return m.writePush(s)
-}
-
-func (m Model) flushIn(id string, s sched, wait time.Duration) (sched, tea.Cmd) {
-	s.flush = m.nextTimer()
-	seq := s.flush
-	return s, m.opts.Ports.Clock.After(wait, func(time.Time) tea.Msg { return pushFlushMsg{id: id, seq: seq} })
+	return m.writeWhenDue(id, s, now)
 }
 
 func (m Model) flushPush(msg pushFlushMsg) (Model, tea.Cmd) {
@@ -142,38 +145,81 @@ func (m Model) flushPush(msg pushFlushMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	s.flush = 0
-	var cmd tea.Cmd
-	// Another instance may have written the entry meanwhile.
-	if wait := s.written.Add(pushWrite).Sub(m.opts.Ports.Clock.Now()); wait > 0 {
-		s, cmd = m.flushIn(msg.id, s, wait)
-	} else {
-		s, cmd = m.writePush(s)
-	}
+	s, cmd := m.writeWhenDue(msg.id, s, m.opts.Ports.Clock.Now())
 	m.sched[msg.id] = s
 	return m, cmd
 }
 
-func (m Model) writePush(s sched) (sched, tea.Cmd) {
-	push, now := *s.pending, s.pendingAt
-	s.pending, s.written = nil, now
+// pushBlocked holds back again a push whose write found the entry's lock
+// taken, unless a newer one is held already; the retry is skipped if the
+// lock holder's fetch wrote newer data.
+func (m Model) pushBlocked(msg pushBlockedMsg) (Model, tea.Cmd) {
+	s, ok := m.sched[msg.id]
+	if !ok || s.held != nil {
+		return m, nil
+	}
+	s.held = &msg.held
+	s, cmd := m.flushIn(msg.id, s, pushWriteGap)
+	m.sched[msg.id] = s
+	return m, cmd
+}
+
+// writeWhenDue writes the held push, or holds it until pushWriteGap after
+// the entry's last write, which another instance may have made meanwhile.
+func (m Model) writeWhenDue(id string, s sched, now time.Time) (sched, tea.Cmd) {
+	if wait := s.written.Add(pushWriteGap).Sub(now); wait > 0 {
+		return m.flushIn(id, s, wait)
+	}
+	return m.writePush(id, s, now)
+}
+
+func (m Model) flushIn(id string, s sched, wait time.Duration) (sched, tea.Cmd) {
+	s.flush = m.nextTimer()
+	seq := s.flush
+	return s, m.opts.Ports.Clock.After(wait, func(time.Time) tea.Msg { return pushFlushMsg{id: id, seq: seq} })
+}
+
+func (m Model) writePush(id string, s sched, now time.Time) (sched, tea.Cmd) {
+	held := *s.held
+	s.held, s.written = nil, now
 	var p widget.Payload
-	if push.Payload != nil {
-		p = *push.Payload
+	if held.push.Payload != nil {
+		p = *held.push.Payload
 	}
 	store, key := m.cache, s.key
 	return s, func() tea.Msg {
-		// A held lock is a fetch in flight in another instance, which writes the entry.
 		unlock, ok := store.Lock(key, now, fetchTimeout)
 		if !ok {
-			return nil
+			return pushBlockedMsg{id: id, held: held}
 		}
 		defer unlock()
 		e, _ := store.Load(key)
-		if e.CheckedAt.After(now) {
+		if e.CheckedAt.After(held.at) {
 			return nil
 		}
-		if n := record(e, p, push.Err, now); !same(e, n) {
+		if n := record(e, p, held.push.Err, held.at); !same(e, n) {
 			_ = store.Save(key, n)
+		}
+		return nil
+	}
+}
+
+// flushPushes writes every held push at once, as visor quits.
+func (m Model) flushPushes() tea.Cmd {
+	now := m.opts.Ports.Clock.Now()
+	var writes []tea.Cmd
+	for _, id := range m.ids() {
+		if s := m.sched[id]; s.held != nil {
+			_, cmd := m.writePush(id, s, now)
+			writes = append(writes, cmd)
+		}
+	}
+	if len(writes) == 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		for _, write := range writes {
+			write()
 		}
 		return nil
 	}
@@ -214,7 +260,8 @@ func (m Model) adoptChanged(files []string) (Model, []tea.Cmd) {
 		if !ok {
 			continue
 		}
-		s.written = later(s.written, e.CheckedAt)
+		// Seen now, the entry was written just before, whenever its fetch or push started.
+		s.written = m.opts.Ports.Clock.Now()
 		m.sched[id] = s
 		if !e.CheckedAt.After(s.checked) {
 			continue

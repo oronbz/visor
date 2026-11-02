@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"testing"
+	"unsafe"
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -42,8 +43,8 @@ func grid(s *render.Screen, texts [4]string, w, h int) []*lipgloss.Layer {
 	return append(layers, lipgloss.NewLayer(th.Fg(theme.Dim).Render("footer")).Y(h-1))
 }
 
-func popup(text string) *lipgloss.Layer {
-	return lipgloss.NewLayer(theme.Dark().Fg(theme.Bright).Render(text)).X(10).Y(3).Z(1)
+func popup(text string, x int) *lipgloss.Layer {
+	return lipgloss.NewLayer(theme.Dark().Fg(theme.Bright).Render(text)).X(x).Y(3).Z(1)
 }
 
 func lit(scr uv.Screen) {
@@ -63,6 +64,7 @@ func TestAScreenDrawsEachFrameAsACompositorOnAFreshCanvasWould(t *testing.T) {
 		w, h   int
 		texts  [4]string
 		popup  string
+		popupX int
 		tinted bool
 	}{
 		{name: "first frame", w: 80, h: 10, texts: [4]string{"a", "b", "c", "d"}},
@@ -72,6 +74,7 @@ func TestAScreenDrawsEachFrameAsACompositorOnAFreshCanvasWould(t *testing.T) {
 		{name: "a popup opened over the tiles", w: 80, h: 10, texts: [4]string{"a", "b", "clock 12:02", "d"}, popup: "popup"},
 		{name: "a tile under the popup changed", w: 80, h: 10, texts: [4]string{"a", "b", "clock 12:03", "d"}, popup: "popup"},
 		{name: "the popup changed", w: 80, h: 10, texts: [4]string{"a", "b", "clock 12:03", "d"}, popup: "pop"},
+		{name: "the popup moved", w: 80, h: 10, texts: [4]string{"a", "b", "clock 12:03", "d"}, popup: "pop", popupX: 30},
 		{name: "the popup closed", w: 80, h: 10, texts: [4]string{"a", "b", "clock 12:03", "d"}},
 		{name: "a seam lit", w: 80, h: 10, texts: [4]string{"a", "b", "clock 12:03", "d"}, tinted: true},
 		{name: "the seam went dark", w: 80, h: 10, texts: [4]string{"a", "b", "clock 12:04", "d"}},
@@ -81,7 +84,7 @@ func TestAScreenDrawsEachFrameAsACompositorOnAFreshCanvasWould(t *testing.T) {
 	for _, f := range frames {
 		layers := grid(s, f.texts, f.w, f.h)
 		if f.popup != "" {
-			layers = append(layers, popup(f.popup))
+			layers = append(layers, popup(f.popup, 10+f.popupX))
 		}
 		var tint func(uv.Screen)
 		if f.tinted {
@@ -93,12 +96,20 @@ func TestAScreenDrawsEachFrameAsACompositorOnAFreshCanvasWould(t *testing.T) {
 	}
 }
 
+// reused is whether b is a's very string, kept rather than drawn again.
+func reused(a, b string) bool { return unsafe.StringData(a) == unsafe.StringData(b) }
+
 func TestAScreenDrawsATileAgainOnlyWhenWhatItShowsChanged(t *testing.T) {
 	s := render.NewScreen()
 	th := theme.Dark()
 	first := s.Tile("clock", th, tile("Clock", "12:00", 20, 5))
-	if again := s.Tile("clock", th, tile("Clock", "12:00", 20, 5)); again != first {
-		t.Error("an unchanged tile drew differently")
+	if again := s.Tile("clock", th, tile("Clock", "12:00", 20, 5)); !reused(first, again) {
+		t.Error("an unchanged tile was drawn again")
+	}
+	s.Frame(20, 5, nil, nil)
+	s.Frame(20, 5, nil, nil)
+	if again := s.Tile("clock", th, tile("Clock", "12:00", 20, 5)); !reused(first, again) {
+		t.Error("a tile was drawn again after frames that drew no tiles, such as too small ones")
 	}
 	if next := s.Tile("clock", th, tile("Clock", "12:01", 20, 5)); next == first || next != render.Draw(th, tile("Clock", "12:01", 20, 5)) {
 		t.Errorf("a changed tile drew\n%s\nwant it drawn afresh", next)

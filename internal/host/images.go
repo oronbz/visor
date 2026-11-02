@@ -200,14 +200,16 @@ func (g *images) byID() [][32]byte {
 	return hashes
 }
 
-// quit deletes every image visor uploaded from the terminal, then quits.
+// quit writes the pushes held back from the cache and deletes every image
+// visor uploaded from the terminal, then quits.
 func (m Model) quit() tea.Cmd {
+	cmds := []tea.Cmd{m.flushPushes()}
 	var out strings.Builder
 	m.images.prune(nil, &out)
-	if out.Len() == 0 {
-		return tea.Quit
+	if out.Len() > 0 {
+		cmds = append(cmds, tea.Raw(out.String()))
 	}
-	return tea.Sequence(tea.Raw(out.String()), tea.Quit)
+	return tea.Sequence(append(cmds, tea.Quit)...)
 }
 
 // answer reads the terminal's answers to the graphics and cell size queries.

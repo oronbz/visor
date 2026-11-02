@@ -20,28 +20,28 @@ import (
 type Screen struct {
 	buf    uv.ScreenBuffer
 	w, h   int
-	layers []placed
+	layers []layer
 	lines  []string
 	tinted bool
-	tiles  map[string]drawn
+	tiles  map[string]drawnTile
 	// used are the tiles drawn since the last frame; the others are dropped.
 	used map[string]bool
 }
 
-type placed struct {
+type layer struct {
 	content string
 	x, y, z int
 	bounds  image.Rectangle
 }
 
-type drawn struct {
+type drawnTile struct {
 	th   theme.Theme
 	tile Tile
 	out  string
 }
 
 func NewScreen() *Screen {
-	return &Screen{tiles: map[string]drawn{}, used: map[string]bool{}}
+	return &Screen{tiles: map[string]drawnTile{}, used: map[string]bool{}}
 }
 
 // Tile is Draw(th, t) for Widget id's tile, reused from the last frame when
@@ -52,45 +52,48 @@ func (s *Screen) Tile(id string, th theme.Theme, t Tile) string {
 		return d.out
 	}
 	out := Draw(th, t)
-	s.tiles[id] = drawn{th: th, tile: t, out: out}
+	s.tiles[id] = drawnTile{th: th, tile: t, out: out}
 	return out
 }
 
 // Frame draws layers, lowest z first, on a w×h screen, then tint over them,
-// and renders it as lipgloss.Canvas.Render does. tint may be nil.
+// and renders it as lipgloss.Canvas.Render does. tint may be nil. Layers'
+// children aren't drawn: lipgloss gives no way to walk them.
 func (s *Screen) Frame(w, h int, layers []*lipgloss.Layer, tint func(uv.Screen)) string {
-	for id := range s.tiles {
-		if !s.used[id] {
-			delete(s.tiles, id)
+	// A frame drawing no tiles, too small or with them all hidden, keeps them for the next.
+	if len(s.used) > 0 {
+		for id := range s.tiles {
+			if !s.used[id] {
+				delete(s.tiles, id)
+			}
 		}
+		clear(s.used)
 	}
-	clear(s.used)
 
-	next := make([]placed, len(layers))
+	next := make([]layer, len(layers))
 	for i, l := range layers {
-		next[i] = placed{content: l.GetContent(), x: l.GetX(), y: l.GetY(), z: l.GetZ()}
+		next[i] = layer{content: l.GetContent(), x: l.GetX(), y: l.GetY(), z: l.GetZ()}
 	}
-	slices.SortStableFunc(next, func(a, b placed) int { return a.z - b.z })
+	slices.SortStableFunc(next, func(a, b layer) int { return a.z - b.z })
 
 	changed, ok := s.changed(w, h, next)
 	if !ok || tint != nil || s.tinted {
 		s.redraw(w, h, next, tint)
 		return strings.Join(s.lines, "\n")
 	}
-	screen := image.Rect(0, 0, w, h)
 	rows := map[int]bool{}
 	for _, i := range changed {
-		area := s.layers[i].bounds.Union(next[i].bounds).Intersect(screen)
+		area := s.layers[i].bounds.Union(next[i].bounds).Intersect(s.whole())
 		for y := area.Min.Y; y < area.Max.Y; y++ {
 			for x := area.Min.X; x < area.Max.X; x++ {
 				s.buf.SetCell(x, y, nil)
 			}
 			rows[y] = true
 		}
-		draw(&s.buf, next[i], screen)
+		s.draw(next[i])
 	}
 	for y := range rows {
-		s.lines[y] = strings.TrimRight(s.buf.Lines[y].Render(), " ")
+		s.renderLine(y)
 	}
 	s.layers = next
 	return strings.Join(s.lines, "\n")
@@ -100,7 +103,7 @@ func (s *Screen) Frame(w, h int, layers []*lipgloss.Layer, tint func(uv.Screen))
 // last frame, filling in every layer's bounds; ok is false when they can't
 // be drawn alone: the screen was resized, layers came, went or moved, or a
 // changed one touches another, which would lose what's under or over it.
-func (s *Screen) changed(w, h int, next []placed) (changed []int, ok bool) {
+func (s *Screen) changed(w, h int, next []layer) (changed []int, ok bool) {
 	if w != s.w || h != s.h || len(next) != len(s.layers) {
 		return nil, false
 	}
@@ -127,14 +130,13 @@ func (s *Screen) changed(w, h int, next []placed) (changed []int, ok bool) {
 	return changed, true
 }
 
-func (s *Screen) redraw(w, h int, next []placed, tint func(uv.Screen)) {
+func (s *Screen) redraw(w, h int, next []layer, tint func(uv.Screen)) {
 	s.buf = uv.NewScreenBuffer(w, h)
 	s.buf.Method = ansi.GraphemeWidth
 	s.w, s.h = w, h
-	screen := image.Rect(0, 0, w, h)
 	for i := range next {
 		next[i].bounds = bounds(next[i])
-		draw(&s.buf, next[i], screen)
+		s.draw(next[i])
 	}
 	if tint != nil {
 		tint(s.buf)
@@ -143,16 +145,22 @@ func (s *Screen) redraw(w, h int, next []placed, tint func(uv.Screen)) {
 	s.layers = next
 	s.lines = make([]string, h)
 	for y := range h {
-		s.lines[y] = strings.TrimRight(s.buf.Lines[y].Render(), " ")
+		s.renderLine(y)
 	}
 }
 
-func bounds(p placed) image.Rectangle {
-	return image.Rect(p.x, p.y, p.x+lipgloss.Width(p.content), p.y+lipgloss.Height(p.content))
+func (s *Screen) whole() image.Rectangle { return image.Rect(0, 0, s.w, s.h) }
+
+func (s *Screen) draw(l layer) {
+	if l.bounds.Overlaps(s.whole()) {
+		uv.NewStyledString(l.content).Draw(&s.buf, l.bounds)
+	}
 }
 
-func draw(buf *uv.ScreenBuffer, p placed, screen image.Rectangle) {
-	if p.bounds.Overlaps(screen) {
-		uv.NewStyledString(p.content).Draw(buf, p.bounds)
-	}
+func (s *Screen) renderLine(y int) {
+	s.lines[y] = strings.TrimRight(s.buf.Lines[y].Render(), " ")
+}
+
+func bounds(l layer) image.Rectangle {
+	return image.Rect(l.x, l.y, l.x+lipgloss.Width(l.content), l.y+lipgloss.Height(l.content))
 }

@@ -51,13 +51,12 @@ type sched struct {
 	// waiting is a refresh another instance is making, spun here too until
 	// its entry lands or this instance tries again.
 	waiting bool
-	// written is when the newest entry this instance knows of was checked,
-	// whichever instance wrote it; pending is the push held back until
-	// pushWrite after it, and flush its armed timer.
-	written   time.Time
-	pending   *widget.Push
-	pendingAt time.Time
-	flush     int
+	// written is when the entry was last written, by whichever instance;
+	// held is the push held back until pushWriteGap after it, and flush the
+	// timer armed to write it.
+	written time.Time
+	held    *heldPush
+	flush   int
 }
 
 type refreshedMsg struct {
@@ -293,7 +292,7 @@ func (m Model) refreshed(msg refreshedMsg) (Model, tea.Cmd) {
 		s, limited = m.settle(msg.id, s, msg.payload, fetched, msg.err)
 		s.checked = msg.at
 		if s.key != "" && !local(msg.err) {
-			s.written = msg.at
+			s.written = now
 		}
 	}
 	m.sched[msg.id] = s
@@ -431,6 +430,10 @@ func (m Model) schedule(id string, refresh time.Duration) (problem string) {
 	}
 	iv, problem := interval(p, refresh)
 	s := sched{interval: iv, key: m.cacheKey(id, p)}
+	// A Widget rebuilt onto the same entry still owes it the push it held.
+	if old := m.sched[id]; old.key == s.key {
+		s.written, s.held, s.flush = old.written, old.held, old.flush
+	}
 	m.sched[id] = s
 	if e, ok := m.cache.Load(s.key); ok && s.key != "" {
 		m.adopt(id, e)
