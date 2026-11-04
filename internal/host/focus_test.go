@@ -59,6 +59,42 @@ func TestTabMovesAcrossRowsWrappingToTheHorizontallyNearestWidget(t *testing.T) 
 	}
 }
 
+func TestTabMovesAcrossTheRowsOfAStackBesideAFullHeightColumn(t *testing.T) {
+	h := phonetic(t, `{"default": {"rows": [
+		{"weight": 1, "widgets": [
+			{"weight": 1, "rows": [
+				{"weight": 1, "widgets": [{"id": "a", "weight": 1}]},
+				{"weight": 1, "widgets": [{"id": "b", "weight": 1}]}
+			]},
+			{"weight": 3, "rows": [
+				{"weight": 1, "widgets": [{"id": "c", "weight": 1}, {"id": "d", "weight": 3}]},
+				{"weight": 1, "widgets": [{"id": "e", "weight": 1}]},
+				{"weight": 1, "widgets": [{"id": "f", "weight": 1}]}
+			]}
+		]}
+	]}}`)
+
+	for _, c := range []struct {
+		from  string
+		press string
+		want  string
+	}{
+		{"1", "tab", "Bravo"},
+		{"2", "tab", "Alpha"},
+		{"3", "tab", "Echo"},
+		{"5", "tab", "Foxtrot"},
+		{"6", "tab", "Delta"},
+		{"5", "shift+tab", "Delta"},
+		{"3", "shift+tab", "Foxtrot"},
+		{"1", "shift+tab", "Bravo"},
+	} {
+		h.Press(c.from, c.press)
+		if got := focused(t, h, phoneticTitles); got != c.want {
+			t.Errorf("%s from Widget %s focuses %q, want %q", c.press, c.from, got, c.want)
+		}
+	}
+}
+
 func TestHLStopAtRowEndsAndShiftedKeysMoveInAnyDirection(t *testing.T) {
 	h := phonetic(t, `{"default": {"rows": [
 		{"weight": 1, "widgets": [{"id": "a", "weight": 1}, {"id": "b", "weight": 1}, {"id": "c", "weight": 1}]},

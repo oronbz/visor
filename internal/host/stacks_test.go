@@ -120,8 +120,10 @@ func TestArrowFocusMovesByPositionThroughStacks(t *testing.T) {
 		{[]string{"4", "h"}, "Alpha"},
 		{[]string{"4", "J"}, "Foxtrot"},
 		{[]string{"5", "K"}, "Alpha"},
-		{[]string{"3", "tab"}, "Foxtrot"},
-		{[]string{"6", "shift+tab"}, "Bravo"},
+		{[]string{"3", "tab"}, "Delta"},
+		{[]string{"4", "tab"}, "Foxtrot"},
+		{[]string{"6", "shift+tab"}, "Delta"},
+		{[]string{"2", "shift+tab"}, "Foxtrot"},
 		{[]string{"5", "tab"}, "Alpha"},
 	} {
 		h.Press(c.keys...)

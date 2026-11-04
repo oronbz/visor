@@ -183,9 +183,9 @@ func (m Model) key(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		case key.Matches(msg, keys.MoveUp):
 			m.focus = f.Toward(m.focus, layout.Up)
 		case key.Matches(msg, keys.NextRow):
-			m.focus = f.NextRow(m.focus, 1)
+			m.focus = f.Wrapping(m.focus, layout.Down)
 		case key.Matches(msg, keys.PrevRow):
-			m.focus = f.NextRow(m.focus, -1)
+			m.focus = f.Wrapping(m.focus, layout.Up)
 		}
 	default:
 		if a, ok := m.actionFor(msg.String()); ok && m.focus != "" {

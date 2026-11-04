@@ -13,6 +13,29 @@ func (f Frame) Toward(id string, d Dir) string {
 	if !ok {
 		return id
 	}
+	return f.nearest(id, t.Rect, d)
+}
+
+// Wrapping is Tab: Toward going Down or Up, except that past the bottom or
+// top it carries on from the opposite edge, as if from a tile there as wide
+// as id's.
+func (f Frame) Wrapping(id string, d Dir) string {
+	if next := f.Toward(id, d); next != id {
+		return next
+	}
+	t, ok := f.Tile(id)
+	if !ok {
+		return id
+	}
+	from := t.Rect
+	from.Y, from.H = -1, 1
+	if d == Up {
+		from.Y = f.h
+	}
+	return f.nearest(id, from, d)
+}
+
+func (f Frame) nearest(id string, t Rect, d Dir) string {
 	best, bestScore := id, [3]float64{math.Inf(1)}
 	for _, o := range f.Tiles {
 		if o.ID == id {
@@ -32,7 +55,7 @@ func (f Frame) Toward(id string, d Dir) string {
 		if gap < 0 {
 			continue
 		}
-		tc, oc := centre(t.Rect), centre(o.Rect)
+		tc, oc := centre(t), centre(o.Rect)
 		off := math.Abs(oc.x - tc.x)
 		if d.across() {
 			overlap = min(t.Y+t.H, o.Y+o.H) - max(t.Y, o.Y)
@@ -45,45 +68,6 @@ func (f Frame) Toward(id string, d Dir) string {
 			apart = 0
 		}
 		if score := [3]float64{apart, float64(gap), off}; slices.Compare(score[:], bestScore[:]) < 0 {
-			best, bestScore = o.ID, score
-		}
-	}
-	return best
-}
-
-// NextRow is Tab: the tile in the top-level row step rows on from id's,
-// wrapping, nearest id's centre horizontally (the higher one on a tie).
-func (f Frame) NextRow(id string, step int) string {
-	t, ok := f.Tile(id)
-	if !ok {
-		return id
-	}
-	var rows []int
-	for _, o := range f.Tiles {
-		if n := len(rows); n == 0 || rows[n-1] != o.Path[0] {
-			rows = append(rows, o.Path[0])
-		}
-	}
-	k := 0
-	for i, r := range rows {
-		if r == t.Path[0] {
-			k = i
-		}
-	}
-	next := rows[((k+step)%len(rows)+len(rows))%len(rows)]
-	cx := t.X + t.W/2
-	best, bestScore := id, [2]float64{math.Inf(1)}
-	for _, o := range f.Tiles {
-		if o.Path[0] != next {
-			continue
-		}
-		d := 0
-		if cx < o.X {
-			d = o.X - cx
-		} else if cx >= o.X+o.W {
-			d = cx - (o.X + o.W - 1)
-		}
-		if score := [2]float64{float64(d), float64(o.Y)}; slices.Compare(score[:], bestScore[:]) < 0 {
 			best, bestScore = o.ID, score
 		}
 	}
