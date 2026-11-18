@@ -139,9 +139,19 @@ func (g *github) search(w http.ResponseWriter, body []byte) {
 	data := map[string]any{"viewer": map[string]any{"login": g.viewer}}
 	for name, v := range q.Variables {
 		s, _ := v.(string)
-		if strings.Contains(s, "review-requested:@me") {
-			data[name] = results(g.requested)
+		if !strings.Contains(s, "review-requested:@me") {
+			continue
 		}
+		prs := g.requested
+		if strings.Contains(s, "user-review-requested:@me") {
+			prs = nil
+			for _, p := range g.requested {
+				if slices.ContainsFunc(p.requests, func(r string) bool { return strings.TrimSuffix(r, "!") == g.viewer }) {
+					prs = append(prs, p)
+				}
+			}
+		}
+		data[name] = results(prs)
 	}
 	json.NewEncoder(w).Encode(map[string]any{"data": data})
 }

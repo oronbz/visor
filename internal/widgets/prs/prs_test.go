@@ -302,6 +302,33 @@ func TestTheDraftsSettingHidesDraftsInTheSearch(t *testing.T) {
 	}
 }
 
+func TestWithTeamsOffOnlyPRsThatAskMeByNameShow(t *testing.T) {
+	g := team(t)
+	h := withPRs(t, g, hosttest.Options{Width: 90, Height: 9, Config: onePRsWidget + "teams = false\n"})
+
+	if reqs := g.Requests(); len(reqs) != 1 || !strings.Contains(reqs[0].Body, "user-review-requested:@me") {
+		t.Fatalf("requests %v, want one search for requests by name", reqs)
+	}
+	got := tile(h)
+	if !strings.Contains(got, "Review requests 1") || !strings.Contains(got, "Retry webhook deliveries") {
+		t.Errorf("want only the PR that asks me by name:\n%s", got)
+	}
+	for _, hidden := range []string{"Drop the legacy router", "Pin the runner image"} {
+		if strings.Contains(got, hidden) {
+			t.Errorf("a team's PR %q showed with teams = false:\n%s", hidden, got)
+		}
+	}
+}
+
+func TestWithTeamsOffAPRIRemovedMyselfFromGoesAwayThoughMyTeamIsStillAsked(t *testing.T) {
+	g := team(t)
+	h := withPRs(t, g, hosttest.Options{Width: 90, Height: 9, Config: onePRsWidget + "teams = false\n"})
+	h.Press("1", "r", "enter")
+	if strings.Contains(tile(h), "Retry webhook deliveries") {
+		t.Errorf("removed by name, the PR stayed with teams = false:\n%s", h.Screen())
+	}
+}
+
 func TestA429PausesEveryPRsWidgetOnTheTokenUntilRetryAfter(t *testing.T) {
 	g := team(t)
 	first := true

@@ -25,6 +25,10 @@ var Type = widget.Type{
 		Name: "drafts", Kind: widget.Bool, Default: true,
 		Description: "Show draft PRs.",
 		Why:         "Set it to false to see only PRs that are ready for review.",
+	}, {
+		Name: "teams", Kind: widget.Bool, Default: true,
+		Description: "Show PRs that ask a team of yours, not you by name.",
+		Why:         "Set it to false to see only PRs that ask you by name.",
 	}},
 	Refresh: 2 * time.Minute,
 	Floor:   30 * time.Second,
@@ -33,12 +37,13 @@ var Type = widget.Type{
 }
 
 func newPRs(c widget.Config) widget.Widget {
-	return prs{ports: c.Ports, drafts: c.Settings.Bool("drafts"), acted: &acted{}}
+	return prs{ports: c.Ports, drafts: c.Settings.Bool("drafts"), teams: c.Settings.Bool("teams"), acted: &acted{}}
 }
 
 type prs struct {
 	ports  ports.Ports
 	drafts bool
+	teams  bool
 	acted  *acted
 }
 
@@ -154,9 +159,13 @@ func (w prs) Refresh(ctx context.Context, now time.Time) (widget.Payload, error)
 	if !w.drafts {
 		filter += " draft:false"
 	}
+	requested := " review-requested:@me"
+	if !w.teams {
+		requested = " user-review-requested:@me"
+	}
 	var d searchData
 	err = c.graphQL(ctx, query, map[string]any{
-		"requested": filter + " review-requested:@me",
+		"requested": filter + requested,
 	}, &d)
 	if auth := (authError{}); errors.As(err, &auth) {
 		return widget.Payload{}, rejected(w.ports, c.from, auth)
@@ -338,7 +347,11 @@ func (w prs) Invoke(ctx context.Context, inv widget.Invocation) (widget.Result, 
 		if err := c.rest(ctx, http.MethodDelete, pull+"/requested_reviewers", body); err != nil {
 			return widget.Result{}, err
 		}
-		w.acted.add(inv.Item, node.awaits)
+		stays := node.awaits
+		if !w.teams {
+			stays = node.asks
+		}
+		w.acted.add(inv.Item, stays)
 		return widget.Result{Toast: "Removed you from the reviewers of " + short}, nil
 	}
 	return widget.Result{}, fmt.Errorf("PRs has no Action %q", inv.Action)
