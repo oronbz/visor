@@ -19,4 +19,4 @@ Default five-role vocabulary (needs-triage, needs-info, ready-for-agent, ready-f
 
 ### Domain docs
 
-Name domain concepts (identifiers, tests, tickets, PR text) with the terms in root `GLOSSARY.md`; never use a word from its _Avoid_ lists. ADRs live in `docs/adr/`; see `docs/agents/domain.md`.
+Name each domain concept (identifiers, tests, tickets, PR text) with its term in root `GLOSSARY.md`, never a word under that concept's _Avoid_. ADRs live in `docs/adr/`; see `docs/agents/domain.md`.
