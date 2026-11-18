@@ -31,6 +31,10 @@ type releases struct {
 	requests int
 	// down, when set, is the status GitHub answers with instead.
 	down int
+	// auth is the Authorization header of each request.
+	auth []string
+	// limited, when set, answers 403 with an exhausted rate limit.
+	limited bool
 }
 
 const notes = "## Changelog\n* 1a2b3c4 Jira: an issue's glyph is its type\n* 5d6e7f8 PRs: a token missing scopes asks for setup\n* 9a8b7c6 Third\n* 1b2c3d4 Fourth\n* 5e6f7a8 Fifth\n* 9b8c7d6 Sixth, never shown\n"
@@ -47,6 +51,13 @@ func newReleases(t *testing.T, tag string) *releases {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.requests++
+		r.auth = append(r.auth, req.Header.Get("Authorization"))
+		if r.limited {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", "1794991446")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 		if r.down != 0 {
 			w.WriteHeader(r.down)
 			return
@@ -516,6 +527,30 @@ func TestAFailedCheckFromThePaletteToastsItsError(t *testing.T) {
 
 	runFromPalette(t, h, "check for a visor upgrade")
 	if want := "Checking for a visor upgrade failed: checking for a new release: GitHub answered 502"; !strings.Contains(h.Screen(), want) {
+		t.Errorf("no toast %q:\n%s", want, h.Screen())
+	}
+}
+
+func TestACheckAsksGitHubWithTheUsersToken(t *testing.T) {
+	gh := newReleases(t, "v0.6.2")
+	running(t, gh, hosttest.Options{Env: map[string]string{"GH_TOKEN": "tok"}})
+
+	gh.mu.Lock()
+	defer gh.mu.Unlock()
+	if len(gh.auth) == 0 || gh.auth[0] != "Bearer tok" {
+		t.Errorf("GitHub saw Authorization %q, want the user's token so the check doesn't share the anonymous rate limit", gh.auth)
+	}
+}
+
+func TestACheckWhoseRateLimitRanOutSaysSo(t *testing.T) {
+	gh := newReleases(t, "v0.6.2")
+	h := running(t, gh, hosttest.Options{})
+	gh.mu.Lock()
+	gh.limited = true
+	gh.mu.Unlock()
+
+	runFromPalette(t, h, "check for a visor upgrade")
+	if want := "GitHub's rate limit ran out until"; !strings.Contains(h.Screen(), want) {
 		t.Errorf("no toast %q:\n%s", want, h.Screen())
 	}
 }

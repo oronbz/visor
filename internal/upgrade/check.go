@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/oronbz/visor/internal/github"
 	"github.com/oronbz/visor/internal/ports"
 	"github.com/oronbz/visor/internal/version"
 )
@@ -81,11 +83,16 @@ type Checker struct {
 	HTTP  *http.Client
 	// API is GitHub's REST base URL.
 	API string
+	// Getenv and Commands find the user's GitHub token, so a check spends
+	// their own rate limit, not the 60 an hour every anonymous caller on
+	// their network shares.
+	Getenv   func(string) string
+	Commands ports.Commands
 }
 
 // For checks through pp, keeping the State in cache, visor's cache directory.
 func For(cache string, pp ports.Ports) Checker {
-	return Checker{Store: StoreIn(cache), HTTP: pp.HTTP, API: pp.Endpoints.GitHubREST}
+	return Checker{Store: StoreIn(cache), HTTP: pp.HTTP, API: pp.Endpoints.GitHubREST, Getenv: pp.Getenv, Commands: pp.Commands}
 }
 
 // Check is the State with the latest release: as stored when an instance
@@ -109,17 +116,21 @@ func (c Checker) Check(now time.Time, force bool) (State, error) {
 func (c Checker) latest() (Release, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(c.API, "/")+"/repos/"+Repo+"/releases/latest", nil)
-	if err != nil {
-		return Release{}, err
+	tok, _ := github.Token(ctx, c.Getenv, c.Commands)
+	resp, err := c.get(ctx, tok)
+	if err == nil && resp.StatusCode == http.StatusUnauthorized && tok != "" {
+		// A stale token shouldn't stop a check that needs none.
+		resp.Body.Close()
+		resp, err = c.get(ctx, "")
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return Release{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+			return Release{}, fmt.Errorf("checking for a new release: GitHub's rate limit ran out%s", resetIn(resp.Header.Get("X-RateLimit-Reset")))
+		}
 		return Release{}, fmt.Errorf("checking for a new release: GitHub answered %s", resp.Status)
 	}
 	var body struct {
@@ -134,6 +145,27 @@ func (c Checker) latest() (Release, error) {
 		return Release{}, errors.New("checking for a new release: GitHub sent no tag")
 	}
 	return Release{Tag: body.Tag, Notes: body.Notes, URL: body.URL}, nil
+}
+
+func (c Checker) get(ctx context.Context, tok string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(c.API, "/")+"/repos/"+Repo+"/releases/latest", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	return c.HTTP.Do(req)
+}
+
+// resetIn is " until 15:04" for GitHub's X-RateLimit-Reset, a Unix time.
+func resetIn(reset string) string {
+	sec, err := strconv.ParseInt(reset, 10, 64)
+	if err != nil {
+		return ""
+	}
+	return " until " + time.Unix(sec, 0).Format("15:04")
 }
 
 // commit is the hash GoReleaser's changelog starts each entry with.
